@@ -4,6 +4,7 @@ import { Footer } from '@/components/layout/Footer';
 import './globals.css';
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://openmate-zq7d.onrender.com'),
   title: {
     template: '%s | OpenMate',
     default: 'OpenMate — Find Your First Open-Source Contribution',
@@ -24,6 +25,8 @@ export const metadata: Metadata = {
     title: 'OpenMate — Find Your First Open-Source Contribution',
     description:
       'Personalized repository onboarding for developers making their first open-source contribution.',
+    url: 'https://openmate-zq7d.onrender.com',
+    siteName: 'OpenMate',
     type: 'website',
   },
 };
