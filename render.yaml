@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: openmate
+    runtime: node
+    plan: starter
+    region: oregon
+    branch: main
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.23.3
+      - key: BACKBOARD_MODEL_PROVIDER
+        value: openrouter
+      - key: BACKBOARD_MODEL_NAME
+        value: google/gemma-3-27b-it
+      - key: BACKBOARD_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: OPENMATE_CHAT_SIGNING_SECRET
+        generateValue: true
