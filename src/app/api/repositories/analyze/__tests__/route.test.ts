@@ -19,6 +19,20 @@ describe('POST /api/repositories/analyze', () => {
     },
   };
 
+  const validProfilePayload = {
+    profile: {
+      repository: {
+        owner: 'facebook',
+        name: 'react',
+        url: 'https://github.com/facebook/react',
+      },
+      skills: [{ name: 'TypeScript', level: 'intermediate' }],
+      interests: ['frontend'],
+      availableHours: 4,
+      contributionExperience: 'some-experience',
+    },
+  };
+
   const mockAnalysis = {
     repositorySummary: {
       purpose: 'A JavaScript library for building user interfaces.',
@@ -69,7 +83,35 @@ describe('POST /api/repositories/analyze', () => {
     htmlUrl: 'https://github.com/facebook/react',
   };
 
-  it('rejects requests with missing repository field with 400', async () => {
+  const mockRecommendationsResult = {
+    status: 'recommended' as const,
+    recommendations: [
+      {
+        issueNumber: 1,
+        title: 'Fix issue 1',
+        url: 'https://github.com/facebook/react/issues/1',
+        fit: {
+          summary: 'Fits well.',
+          relevantSkills: ['TypeScript'],
+          matchedInterests: ['frontend' as const],
+          experienceFit: 'good' as const,
+        },
+        scope: { level: 'small' as const, reasoning: 'Small' },
+        likelyFiles: [],
+        conceptsToUnderstand: [],
+        startingPoint: { summary: 'Start here', steps: [] },
+        cautions: [],
+      },
+    ],
+    metadata: {
+      candidateIssuesConsidered: 1,
+      generatedAt: '2026-01-01T00:00:00Z',
+      modelProvider: 'openrouter',
+      modelName: 'google/gemma-3-27b-it',
+    },
+  };
+
+  it('rejects requests with missing repository and profile fields with 400', async () => {
     const req = new Request('http://localhost/api/repositories/analyze', {
       method: 'POST',
       body: JSON.stringify({}),
@@ -78,7 +120,7 @@ describe('POST /api/repositories/analyze', () => {
     const res = await handleAnalyzeRequest(req);
     expect(res.status).toBe(400);
     const data = await res.json();
-    expect(data.error).toContain('Missing repository field');
+    expect(data.error).toContain('Missing repository or profile field');
   });
 
   it('rejects invalid repository specifications with 422', async () => {
@@ -93,6 +135,47 @@ describe('POST /api/repositories/analyze', () => {
     expect(res.status).toBe(422);
     const data = await res.json();
     expect(data.error).toContain('Invalid repository specification');
+  });
+
+  it('rejects invalid developer profile specifications with 422', async () => {
+    const req = new Request('http://localhost/api/repositories/analyze', {
+      method: 'POST',
+      body: JSON.stringify({
+        profile: {
+          repository: { owner: 'o', name: 'r', url: 'https://github.com/o/r' },
+          skills: [], // minimum 1 required
+          interests: ['frontend'],
+          availableHours: 2,
+          contributionExperience: 'first-time',
+        },
+      }),
+    });
+
+    const res = await handleAnalyzeRequest(req);
+    expect(res.status).toBe(422);
+    const data = await res.json();
+    expect(data.error).toContain('Invalid developer profile specification');
+  });
+
+  it('rejects conflicting repository identities between repository and profile with 422', async () => {
+    const req = new Request('http://localhost/api/repositories/analyze', {
+      method: 'POST',
+      body: JSON.stringify({
+        repository: { owner: 'facebook', name: 'react', url: 'https://github.com/facebook/react' },
+        profile: {
+          repository: { owner: 'vercel', name: 'next.js', url: 'https://github.com/vercel/next.js' },
+          skills: [{ name: 'TypeScript', level: 'intermediate' }],
+          interests: ['frontend'],
+          availableHours: 2,
+          contributionExperience: 'first-time',
+        },
+      }),
+    });
+
+    const res = await handleAnalyzeRequest(req);
+    expect(res.status).toBe(422);
+    const data = await res.json();
+    expect(data.error).toContain('Conflicting repository identities');
   });
 
   it('successfully returns repository and AI analysis without leaking raw context or secrets', async () => {
@@ -120,6 +203,30 @@ describe('POST /api/repositories/analyze', () => {
     const jsonString = JSON.stringify(json);
     expect(jsonString).not.toContain('BACKBOARD_API_KEY');
     expect(jsonString).not.toContain('untrusted-repository-content');
+  });
+
+  it('successfully processes profile with single-pass analyzeAndRecommend returning recommendations', async () => {
+    const mockService = {
+      analyzeAndRecommend: vi.fn().mockResolvedValue({
+        repository: mockRepositoryMetadata,
+        analysis: mockAnalysis,
+        recommendations: mockRecommendationsResult,
+      }),
+    } as unknown as RepositoryAnalysisService;
+
+    const req = new Request('http://localhost/api/repositories/analyze', {
+      method: 'POST',
+      body: JSON.stringify(validProfilePayload),
+    });
+
+    const res = await handleAnalyzeRequest(req, mockService);
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.data.recommendations.status).toBe('recommended');
+    expect(json.data.recommendations.recommendations).toHaveLength(1);
+    expect(mockService.analyzeAndRecommend).toHaveBeenCalledTimes(1);
   });
 
   it('maps RepositoryNotFoundError to 404', async () => {
