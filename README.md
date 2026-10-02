@@ -24,21 +24,35 @@ By analyzing public GitHub repositories alongside a developer's specific skills,
 - **AI / Reasoning**: Gemma open-weight models via Backboard
 - **Deployment**: Render
 
-## GitHub Ingestion & Limits
+## Repository Analysis Pipeline
 
-OpenMate integrates with GitHub's REST API (`2022-11-28`) for secure, deterministic ingestion of public repositories. Ingestion safeguards include:
+OpenMate processes repositories through a multi-stage deterministic pipeline:
 
-- **SSRF Boundary**: All outbound requests strictly target `https://api.github.com`. Links found in READMEs, issues, or payloads are never followed.
-- **Server-Only Execution**: The GitHub integration and `GITHUB_TOKEN` are protected by `server-only` and are never exposed to browser bundles.
-- **Bounded Thresholds**:
-  - Max tree entries: 3,000
-  - Max README size: 256 KB
-  - Max CONTRIBUTING size: 128 KB
-  - Max individual source/manifest file size: 128 KB
-  - Max representative source files: 8 files (max 384 KB cumulative)
-  - Max open issues: 50 (pull requests are filtered out)
-  - Request timeout: 10 seconds with `AbortController`
-- **Rate Limits**: Unauthenticated requests are limited to 60 requests/hour by GitHub. Setting `GITHUB_TOKEN` in `.env.local` raises this limit to 5,000 requests/hour.
+```text
+GitHub REST Ingestion (Network & limits boundary)
+  ↓ IngestedRepository
+Repository Context Engine (Pure transformation, sanitization & character budgets)
+  ↓ RepositoryContext & AI-safe serialization
+AI Synthesis & Reasoning (Phase 5 - Gemma via Backboard)
+  ↓
+Personalized Contribution Guide (Phase 6)
+```
+
+### Context Engine Guardrails & Budgets
+
+The context engine (`src/features/repository-context`) transforms raw ingestion payloads into a bounded, model-ready representation with explicit safety guarantees:
+
+- **Zero Network Operations**: Pure in-memory transformation with no external dependencies or API requests.
+- **Untrusted Content Demarcation**: All repository text (README, code, manifests, issue bodies) is tagged with `trust: "untrusted-repository-content"` and XML-escaped to prevent prompt delimiter breakouts.
+- **Explicit Character Budgets**:
+  - Global serialized context ceiling: 60,000 characters
+  - README: max 10,000 characters
+  - CONTRIBUTING: max 6,000 characters
+  - Manifests: max 6,000 characters cumulative (max 3,000 per manifest)
+  - Tree structural summary: max 3,000 characters (max depth: 3, max entries: 80)
+  - Representative source files: max 16,000 characters cumulative (max 4,000 per file)
+  - Open issues: max 8,000 characters cumulative (max 15 issues, max 600 chars per body)
+- **Deterministic Prioritization**: Root entrypoints and shallow source files are prioritized over deeply nested utilities; `good first issue` and `help wanted` issues are prioritized for contribution onboarding.
 
 ## Getting Started
 
