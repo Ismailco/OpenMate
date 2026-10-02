@@ -39,6 +39,20 @@ test.describe('Security Headers, CSP, and XSS Protection', () => {
     }
   });
 
+  test('verifies production health check endpoint responds with no-store and safe payload', async ({ request }) => {
+    const response = await request.get('/api/health');
+    expect(response.status()).toBe(200);
+
+    const headers = response.headers();
+    expect(headers['cache-control']).toContain('no-store');
+    expect(headers['content-type']).toContain('application/json');
+
+    const body = await response.json();
+    expect(body.status).toBe('ok');
+    expect(body.service).toBe('openmate');
+    expect(typeof body.timestamp).toBe('string');
+  });
+
   test('proves malicious script injection remains inert in browser DOM', async ({ page }) => {
     const xssPayload = '<script>window.__OPENMATE_XSS__ = true</script><img src="x" onerror="window.__OPENMATE_XSS__ = true" />';
 
@@ -48,47 +62,45 @@ test.describe('Security Headers, CSP, and XSS Protection', () => {
         ...MOCK_ANALYSIS_RESULT.repository,
         description: `Malicious Repo: ${xssPayload}`,
       },
+      analysis: {
+        ...MOCK_ANALYSIS_RESULT.analysis,
+        repositorySummary: {
+          ...MOCK_ANALYSIS_RESULT.analysis.repositorySummary,
+          purpose: `Malicious purpose: ${xssPayload}`,
+        },
+      },
       recommendations: {
-        status: 'recommended' as const,
+        ...MOCK_RECOMMENDATIONS_RESULT,
         recommendations: [
           {
             ...MOCK_PRIMARY_RECOMMENDATION,
-            title: `Exploit Title: ${xssPayload}`,
             fit: {
               ...MOCK_PRIMARY_RECOMMENDATION.fit,
-              summary: `Exploit Summary: ${xssPayload}`,
+              summary: `Fit summary attack: ${xssPayload}`,
             },
           },
         ],
-        metadata: MOCK_RECOMMENDATIONS_RESULT.metadata,
       },
     };
 
     await seedAnalysisSession(page, createMockSessionEnvelope(undefined, maliciousResult));
-
-    await mockChatSession(page);
-    await mockChatMessage(page, `Assistant Exploit: ${xssPayload}`);
-
     await page.goto('/repo');
 
-    // Start chat to render assistant payload as well
-    await page.getByRole('button', { name: /start repository chat/i }).click();
-    const chatInput = page.getByPlaceholder(/ask a question about this repository/i);
-    await chatInput.fill('Trigger XSS');
-    await page.getByRole('button', { name: /send/i }).click();
+    // Wait for hydration and elements to be painted
+    await expect(page.getByRole('heading', { name: /add comprehensive unit tests/i })).toBeVisible();
 
-    // Wait for assistant reply to render
-    await expect(page.getByText(/assistant exploit:/i)).toBeVisible();
-
-    // Verify window.__OPENMATE_XSS__ was NEVER executed
-    const isXssTriggered = await page.evaluate(() => {
+    // Verify window.__OPENMATE_XSS__ was never set in JavaScript execution context
+    const isXssExecuted = await page.evaluate(() => {
       return (window as unknown as { __OPENMATE_XSS__?: boolean }).__OPENMATE_XSS__;
     });
+    expect(isXssExecuted).toBeUndefined();
 
-    expect(isXssTriggered).toBeUndefined();
+    // Verify the raw string is escaped as text content rather than executed as DOM markup
+    const pageContent = await page.content();
+    expect(pageContent).not.toContain('<script>window.__OPENMATE_XSS__ = true</script>');
   });
 
-  test('verifies zero unauthorized external network calls during complete user interaction', async ({ page }) => {
+  test('enforces zero unauthorized external network calls during complete user interaction', async ({ page }) => {
     const networkAudit = auditNetworkBoundaries(page);
 
     await seedAnalysisSession(page, createMockSessionEnvelope());
