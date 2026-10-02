@@ -149,3 +149,46 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e
 - **Unit & Integration Suite (Vitest)**: Tests domain logic, schema validation, ingestion boundaries, candidate ranking heuristics, RAG context formatting, and HMAC token signing.
 - **Browser E2E Suite (Playwright + Chromium)**: Launches a real production build (`pnpm build` + `next start`) with HTTP security headers and CSP enabled. Tests full onboarding navigation, sessionStorage handoff, results rendering, chat lifecycle, error recovery, mobile viewport (375×812), and XSS neutralization.
 - **GitHub Actions CI (`.github/workflows/ci.yml`)**: Parallel quality gate (lint, typecheck, unit tests) and browser E2E gate on every push and pull request targeting `main`. Completely fork-friendly with least-privilege permissions and zero required repository secrets.
+
+---
+
+## Observability & Agent Tracing (Sentry)
+
+OpenMate instruments its production generative AI workflows with **Sentry Agent Tracing** using the OpenTelemetry `gen_ai.*` semantic conventions.
+
+### Trace Architecture
+
+```text
+User / Browser
+      ↓
+OpenMate (Render Next.js Web Service)
+      ↓
+Sentry Trace: OpenMate repository analysis (openmate.analysis)
+      ├── GitHub repository ingestion (github.ingest)
+      ├── Repository context build (openmate.context.build)
+      ├── Gemma repository analysis (gen_ai.chat)
+      │     └── Model: google/gemma-3-27b-it via Backboard / OpenRouter
+      ├── Candidate issue selection (openmate.recommendation.candidates)
+      └── Gemma contribution recommendation (gen_ai.chat)
+            └── Model: google/gemma-3-27b-it via Backboard / OpenRouter
+
+Ask OpenMate:
+Sentry Trace: OpenMate chat initialization (openmate.chat.init)
+      ├── GitHub repository ingestion (github.ingest)
+      ├── Repository context build (openmate.context.build)
+      ├── Backboard RAG document upload (openmate.rag.upload)
+      └── Backboard RAG indexing (openmate.rag.index)
+
+Sentry Conversational Span: Ask OpenMate generation (gen_ai.chat)
+      ├── Model: google/gemma-3-27b-it
+      └── Conversation ID: conv_<sha256(threadId)>
+```
+
+### Privacy & Telemetry Invariants
+
+1. **Zero Secret Leakage**: `BACKBOARD_API_KEY`, `GITHUB_TOKEN`, and `OPENMATE_CHAT_SIGNING_SECRET` are never attached to spans, breadcrumbs, tags, or errors. Sentry `beforeSend` and `beforeSendSpan` sanitize any stray authorization headers or forbidden keys.
+2. **Metadata Over Payloads**: OpenMate records telemetry about the workflow structure and performance (counts, durations, status codes, model names), never raw source code files, issue bodies, prompts, model responses, or RAG document chunks.
+3. **Non-Reversible Conversation Grouping**: Multi-turn chat conversations are grouped into Sentry Agent Tracing timelines using a deterministic one-way SHA-256 hash (`conv_<sha256(threadId)>`), never the raw provider thread ID or signed token.
+4. **Authoritative Token Telemetry**: Token metrics (`input_tokens`, `output_tokens`, `total_tokens`) are recorded if and only if authoritatively provided by the upstream provider. Tokens and costs are never approximated or fabricated.
+5. **Fault Isolation**: Observability is best-effort. If Sentry is unconfigured or encounters an internal transport issue, OpenMate's analysis and chat workflows execute completely unaffected.
+6. **Configurable Sampling**: Production tracing sample rate is controlled via `SENTRY_TRACES_SAMPLE_RATE` (default `1.0` during Hacktoberfest demo/evaluation). For high-volume production, set `SENTRY_TRACES_SAMPLE_RATE=0.1` in Render environment variables.
