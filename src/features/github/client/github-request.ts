@@ -32,7 +32,7 @@ export interface GitHubApiResponse<T> {
 
 /**
  * Low-level, SSRF-safe request dispatcher to GitHub's REST API.
- * Only accepts relative paths on https://api.github.com.
+ * Only accepts relative paths strictly bound to https://api.github.com.
  */
 export async function githubRequest<T = unknown>(
   endpointPath: string,
@@ -41,6 +41,23 @@ export async function githubRequest<T = unknown>(
   // SSRF guard: ensure endpointPath is strictly relative and does not include host or protocol
   if (!endpointPath.startsWith('/') || endpointPath.startsWith('//')) {
     throw new Error('Invalid GitHub API endpoint path. Must start with a single slash.');
+  }
+
+  // SSRF guard: verify target origin strictly matches GitHub API base
+  const resolved = new URL(endpointPath, GITHUB_API_BASE);
+  if (resolved.origin !== GITHUB_API_BASE) {
+    throw new Error('Invalid GitHub API endpoint path. Destination must match GitHub API origin.');
+  }
+
+  // Path traversal guard
+  const decodedPath = decodeURIComponent(endpointPath);
+  if (
+    decodedPath.includes('/../') ||
+    decodedPath.endsWith('/..') ||
+    decodedPath.includes('/./') ||
+    decodedPath.endsWith('/.')
+  ) {
+    throw new Error('Invalid GitHub API endpoint path. Path traversal is strictly forbidden.');
   }
 
   const url = `${GITHUB_API_BASE}${endpointPath}`;
@@ -58,7 +75,7 @@ export async function githubRequest<T = unknown>(
   };
 
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
 
   try {
@@ -66,98 +83,63 @@ export async function githubRequest<T = unknown>(
       method: 'GET',
       headers,
       signal: controller.signal,
-      cache: 'no-store',
     });
 
     const rateLimit = parseRateLimitHeaders(response.headers);
 
-    if (response.ok) {
-      // Content could be JSON or raw text
-      const contentType = response.headers.get('content-type') || '';
-      let data: T;
-      if (contentType.includes('application/json') || contentType.includes('json')) {
-        data = (await response.json()) as T;
-      } else {
-        const text = await response.text();
-        data = text as unknown as T;
-      }
-
-      return {
-        data,
-        rateLimit,
-        status: response.status,
-      };
+    if (response.status === 404) {
+      throw new RepositoryNotFoundError(
+        options.owner ?? 'unknown',
+        options.repo ?? 'unknown'
+      );
     }
 
-    // Handle error statuses cleanly
-    const status = response.status;
-    const owner = options.owner ?? 'unknown';
-    const repo = options.repo ?? 'unknown';
-
-    if (status === 401) {
+    if (response.status === 401) {
       throw new GitHubAuthenticationError(
         'GitHub authentication failed. Please check GITHUB_TOKEN configuration.'
       );
     }
 
-    if (status === 403 || status === 429) {
+    if (response.status === 403) {
       if (rateLimit && rateLimit.remaining === 0) {
         throw new GitHubRateLimitError(rateLimit);
       }
-      // Read error body message if available
-      let errorDetail = '';
-      try {
-        const errJson = (await response.json()) as { message?: string };
-        errorDetail = errJson.message ?? '';
-      } catch {
-        // Ignore json parse error on error responses
-      }
-
-      if (errorDetail.toLowerCase().includes('rate limit')) {
-        throw new GitHubRateLimitError(rateLimit, errorDetail);
-      }
-
       throw new RepositoryAccessError(
-        owner,
-        repo,
-        errorDetail || `Access denied for repository "${owner}/${repo}".`
+        options.owner ?? 'unknown',
+        options.repo ?? 'unknown',
+        'Repository is private, blocked, or requires additional permissions.'
       );
     }
 
-    if (status === 404) {
-      throw new RepositoryNotFoundError(owner, repo);
+    if (response.status === 429) {
+      throw new GitHubRateLimitError(
+        rateLimit ?? {
+          limit: 60,
+          remaining: 0,
+          resetAt: new Date(Date.now() + 60000),
+          used: 60,
+        }
+      );
     }
 
-    let errorMessage = `GitHub request failed with status ${status}`;
-    try {
-      const errJson = (await response.json()) as { message?: string };
-      if (errJson.message) {
-        errorMessage = errJson.message;
-      }
-    } catch {
-      // Ignore
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API returned unexpected status ${response.status} for ${endpointPath}.`
+      );
     }
 
-    throw new GitHubApiError(status, errorMessage);
+    const data = (await response.json()) as T;
+    return {
+      data,
+      rateLimit,
+      status: response.status,
+    };
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
       throw new GitHubTimeoutError(timeoutMs);
     }
-    // Re-throw our typed errors directly
-    if (
-      err instanceof GitHubApiError ||
-      err instanceof GitHubAuthenticationError ||
-      err instanceof GitHubRateLimitError ||
-      err instanceof RepositoryAccessError ||
-      err instanceof RepositoryNotFoundError
-    ) {
-      throw err;
-    }
-
-    throw new GitHubApiError(
-      500,
-      err instanceof Error ? err.message : 'Unknown network failure communicating with GitHub.'
-    );
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }

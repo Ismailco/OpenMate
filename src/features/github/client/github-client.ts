@@ -24,6 +24,49 @@ import {
   RepositoryNotFoundError,
 } from '../errors';
 
+const OWNER_REGEX = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/;
+const REPO_REGEX = /^[a-zA-Z0-9_.-]+$/;
+
+/**
+ * Validates repository owner and name coordinates against GitHub naming specifications.
+ */
+export function assertValidRepositoryCoordinates(owner: string, repo: string): void {
+  if (
+    !owner ||
+    typeof owner !== 'string' ||
+    owner.length > 39 ||
+    !OWNER_REGEX.test(owner)
+  ) {
+    throw new Error(`Invalid repository owner name: "${owner}".`);
+  }
+
+  if (
+    !repo ||
+    typeof repo !== 'string' ||
+    repo.length > 100 ||
+    repo === '.' ||
+    repo === '..' ||
+    !REPO_REGEX.test(repo)
+  ) {
+    throw new Error(`Invalid repository name: "${repo}".`);
+  }
+}
+
+/**
+ * Validates that an internal file path does not contain path traversal sequences.
+ */
+export function assertValidFilePath(filePath: string): void {
+  if (
+    !filePath ||
+    typeof filePath !== 'string' ||
+    filePath.includes('..') ||
+    filePath.startsWith('/') ||
+    filePath.startsWith('\\')
+  ) {
+    throw new Error(`Invalid file path "${filePath}". Path traversal is not permitted.`);
+  }
+}
+
 export class GitHubClient {
   /**
    * Fetches and validates public repository metadata.
@@ -32,6 +75,8 @@ export class GitHubClient {
     owner: string,
     repo: string
   ): Promise<RepositoryMetadata> {
+    assertValidRepositoryCoordinates(owner, repo);
+
     const res = await githubRequest(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, {
       owner,
       repo,
@@ -56,6 +101,8 @@ export class GitHubClient {
     owner: string,
     repo: string
   ): Promise<RepositoryDocument | null> {
+    assertValidRepositoryCoordinates(owner, repo);
+
     try {
       const res = await githubRequest(
         `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`,
@@ -95,6 +142,8 @@ export class GitHubClient {
     owner: string,
     repo: string
   ): Promise<RepositoryDocument | null> {
+    assertValidRepositoryCoordinates(owner, repo);
+
     const candidatePaths = [
       'CONTRIBUTING.md',
       '.github/CONTRIBUTING.md',
@@ -129,6 +178,8 @@ export class GitHubClient {
     repo: string,
     defaultBranch: string
   ): Promise<{ entries: RepositoryTreeEntry[]; isTruncated: boolean }> {
+    assertValidRepositoryCoordinates(owner, repo);
+
     try {
       const res = await githubRequest(
         `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(
@@ -165,6 +216,9 @@ export class GitHubClient {
     source: DocumentSource,
     maxBytes: number = GITHUB_LIMITS.MAX_INDIVIDUAL_FILE_BYTES
   ): Promise<RepositoryDocument | null> {
+    assertValidRepositoryCoordinates(owner, repo);
+    assertValidFilePath(path);
+
     try {
       const res = await githubRequest(
         `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodeURI(path)}`,
@@ -205,6 +259,8 @@ export class GitHubClient {
     repo: string,
     limit: number = GITHUB_LIMITS.MAX_ISSUES_FETCHED
   ): Promise<{ issues: RepositoryIssue[]; isTruncated: boolean }> {
+    assertValidRepositoryCoordinates(owner, repo);
+
     const res = await githubRequest(
       `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues?state=open&per_page=100`,
       { owner, repo }

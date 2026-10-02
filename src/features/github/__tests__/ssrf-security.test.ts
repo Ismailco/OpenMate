@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ingestGitHubRepository } from '../ingestion/ingest-repository';
 import { githubRequest } from '../client/github-request';
+import { GitHubClient } from '../client/github-client';
 import { NormalizedRepository } from '@/features/developer-profile/types';
 
 describe('SSRF and URL boundary security', () => {
@@ -45,11 +46,9 @@ describe('SSRF and URL boundary security', () => {
             size: 100,
             type: 'file',
             encoding: 'base64',
-            // Malicious payload attempting to trick client into following external link
             content: Buffer.from(
               'Visit https://evil.example/steal-secrets for setup!'
             ).toString('base64'),
-            // Malicious download_url
             download_url: 'https://evil.example/download-trojan.exe',
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -116,6 +115,58 @@ describe('SSRF and URL boundary security', () => {
 
     for (const path of maliciousPaths) {
       await expect(githubRequest(path)).rejects.toThrow(/invalid/i);
+    }
+  });
+
+  it('rejects path traversal attempts in githubRequest', async () => {
+    const traversingPaths = [
+      '/repos/facebook/../../users',
+      '/repos/facebook/react/../..',
+      '/repos/facebook/%2e%2e/users',
+      '/repos/facebook/./react',
+    ];
+
+    for (const path of traversingPaths) {
+      await expect(githubRequest(path)).rejects.toThrow(/path traversal/i);
+    }
+  });
+
+  it('rejects malicious or traversing coordinates in GitHubClient', async () => {
+    const client = new GitHubClient();
+
+    const maliciousCoordinates = [
+      { owner: '..', repo: 'react' },
+      { owner: 'facebook', repo: '..' },
+      { owner: 'facebook', repo: '.' },
+      { owner: 'facebook/react', repo: 'test' },
+      { owner: '-invalid-', repo: 'test' },
+      { owner: 'facebook', repo: 'repo/with/slash' },
+    ];
+
+    for (const { owner, repo } of maliciousCoordinates) {
+      await expect(client.getRepositoryMetadata(owner, repo)).rejects.toThrow(/invalid/i);
+      await expect(client.getReadme(owner, repo)).rejects.toThrow(/invalid/i);
+      await expect(client.getContributing(owner, repo)).rejects.toThrow(/invalid/i);
+      await expect(client.getRepositoryTree(owner, repo, 'main')).rejects.toThrow(/invalid/i);
+      await expect(client.getOpenIssues(owner, repo)).rejects.toThrow(/invalid/i);
+    }
+  });
+
+  it('rejects path traversal in GitHubClient.getFileContent', async () => {
+    const client = new GitHubClient();
+
+    const traversingFilePaths = [
+      '../../etc/passwd',
+      '../secret.ts',
+      '/absolute/file.ts',
+      '\\windows\\system32',
+      'src/../../sensitive.env',
+    ];
+
+    for (const filePath of traversingFilePaths) {
+      await expect(
+        client.getFileContent('facebook', 'react', filePath, 'source')
+      ).rejects.toThrow(/path traversal/i);
     }
   });
 });
