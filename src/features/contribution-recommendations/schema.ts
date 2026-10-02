@@ -1,9 +1,68 @@
 import { z } from 'zod';
 import { ContributionInterestSchema } from '../developer-profile/schemas';
 
-export const ExperienceFitSchema = z.enum(['good', 'stretch', 'uncertain']);
+export const ExperienceFitSchema = z.preprocess((val) => {
+  if (typeof val === 'string') {
+    const s = val.toLowerCase().trim();
+    if (
+      s.includes('good') ||
+      s.includes('great') ||
+      s.includes('perfect') ||
+      s.includes('well') ||
+      s.includes('fit') ||
+      s.includes('beginner') ||
+      s.includes('first') ||
+      s.includes('easy') ||
+      s.includes('ideal')
+    ) {
+      return 'good';
+    }
+    if (
+      s.includes('stretch') ||
+      s.includes('challeng') ||
+      s.includes('hard') ||
+      s.includes('advanc') ||
+      s.includes('moderate')
+    ) {
+      return 'stretch';
+    }
+    return 'uncertain';
+  }
+  return val;
+}, z.enum(['good', 'stretch', 'uncertain']));
 
-export const ScopeLevelSchema = z.enum(['small', 'medium', 'large', 'unknown']);
+export const ScopeLevelSchema = z.preprocess((val) => {
+  if (typeof val === 'string') {
+    const s = val.toLowerCase().trim();
+    if (
+      s.includes('small') ||
+      s.includes('tiny') ||
+      s.includes('low') ||
+      s.includes('minor') ||
+      s.includes('quick')
+    ) {
+      return 'small';
+    }
+    if (
+      s.includes('med') ||
+      s.includes('moderat') ||
+      s.includes('standard')
+    ) {
+      return 'medium';
+    }
+    if (
+      s.includes('large') ||
+      s.includes('big') ||
+      s.includes('high') ||
+      s.includes('major') ||
+      s.includes('complex')
+    ) {
+      return 'large';
+    }
+    return 'unknown';
+  }
+  return val;
+}, z.enum(['small', 'medium', 'large', 'unknown']));
 
 export const LikelyFileSchema = z.object({
   path: z.string().min(1).max(300),
