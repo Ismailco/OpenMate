@@ -12,4 +12,5 @@ export * from './FilesToUnderstand';
 export * from './LocalSetupGuide';
 export * from './ContributionNotesView';
 export * from './GlossaryList';
+export * from './AskOpenMate';
 export * from './RepositoryResultsClient';

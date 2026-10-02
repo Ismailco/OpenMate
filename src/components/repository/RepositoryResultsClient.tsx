@@ -11,6 +11,7 @@ import {
   clearAnalysisSession,
   AnalysisSession,
 } from '@/features/analysis-session';
+import { clearChatStorage } from '@/features/repository-assistant/storage/chat-storage';
 import { RepoHeader } from './RepoHeader';
 import { PrimaryRecommendation } from './PrimaryRecommendation';
 import { RecommendationCard } from './RecommendationCard';
@@ -23,6 +24,7 @@ import { FilesToUnderstand } from './FilesToUnderstand';
 import { LocalSetupGuide } from './LocalSetupGuide';
 import { ContributionNotesView } from './ContributionNotesView';
 import { GlossaryList } from './GlossaryList';
+import { AskOpenMate } from './AskOpenMate';
 
 type ClientSessionState =
   | { status: 'loading-session' }
@@ -40,6 +42,7 @@ export function RepositoryResultsClient() {
   }, []);
 
   const handleReset = () => {
+    clearChatStorage();
     clearAnalysisSession();
     router.push('/start');
   };
@@ -143,7 +146,15 @@ export function RepositoryResultsClient() {
           </div>
         )}
 
-        {/* 4. Repository Overview */}
+        {/* 4. Ask OpenMate (Conversational Repository Assistant with Backboard RAG) */}
+        <div className="mb-12">
+          <AskOpenMate
+            profile={profile}
+            primaryIssueNumber={primaryRec?.issueNumber}
+          />
+        </div>
+
+        {/* 5. Repository Overview */}
         <Section
           id="repository-overview"
           title="Repository Overview"
@@ -153,7 +164,7 @@ export function RepositoryResultsClient() {
           <RepositoryOverview summary={analysis.repositorySummary} />
         </Section>
 
-        {/* 5. Detected Technologies */}
+        {/* 6. Detected Technologies */}
         <Section
           id="technologies"
           title="Technologies &amp; Tooling"
@@ -163,7 +174,7 @@ export function RepositoryResultsClient() {
           <TechnologyList technologies={analysis.technologies} />
         </Section>
 
-        {/* 6. Architecture & Key Modules */}
+        {/* 7. Architecture & Key Modules */}
         <Section
           id="architecture"
           title="Architecture &amp; Key Modules"
@@ -173,7 +184,7 @@ export function RepositoryResultsClient() {
           <ArchitectureOverview architecture={analysis.architecture} />
         </Section>
 
-        {/* 7. Files to Understand First */}
+        {/* 8. Files to Understand First */}
         <Section
           id="files-to-understand"
           title="Files to Understand First"
@@ -183,7 +194,7 @@ export function RepositoryResultsClient() {
           <FilesToUnderstand files={analysis.filesToUnderstand} />
         </Section>
 
-        {/* 8. Local Setup Guide */}
+        {/* 9. Local Setup Guide */}
         <Section
           id="local-setup"
           title="Local Setup &amp; Verification"
@@ -193,7 +204,7 @@ export function RepositoryResultsClient() {
           <LocalSetupGuide localSetup={analysis.localSetup} />
         </Section>
 
-        {/* 9. Contribution Guidelines */}
+        {/* 10. Contribution Guidelines */}
         <Section
           id="contribution-guidelines"
           title="Contribution Guidelines &amp; Quality Notes"
@@ -203,7 +214,7 @@ export function RepositoryResultsClient() {
           <ContributionNotesView notes={analysis.contributionNotes} />
         </Section>
 
-        {/* 10. Glossary (conditional) */}
+        {/* 11. Glossary (conditional) */}
         {analysis.glossary.length > 0 && (
           <Section
             id="glossary"
