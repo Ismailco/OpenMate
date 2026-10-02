@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality Gate (Lint, Typecheck, Test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies strictly from lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Run ESLint
+        run: pnpm lint
+
+      - name: Run TypeScript typecheck
+        run: pnpm typecheck
+
+      - name: Run Vitest unit & integration tests
+        run: pnpm test
+
+  e2e:
+    name: Browser E2E Gate (Production Build & Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      NODE_ENV: production
+      BACKBOARD_API_KEY: ci-test-fake-key
+      GITHUB_TOKEN: ci-test-fake-token
+      OPENMATE_CHAT_SIGNING_SECRET: ci-test-signing-secret-with-minimum-32-chars
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies strictly from lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium with system dependencies
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build Next.js production application
+        run: pnpm build
+
+      - name: Run Playwright E2E tests against production server
+        run: pnpm e2e
+
+      - name: Upload Playwright diagnostic artifacts on failure
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && failure() }}
+        with:
+          name: playwright-failure-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
