@@ -42,12 +42,21 @@ export function signConversationToken(
     assistantId: string;
     threadId: string;
     repositoryFullName: string;
+    issuedAt?: number;
   },
   secret: string,
   ttlMs: number = CONVERSATION_TOKEN_MAX_AGE_MS
 ): string {
   const validatedSecret = validateSigningSecret(secret);
-  const now = Date.now();
+  let now = params.issuedAt ?? Date.now();
+  let expiresAt = now + ttlMs;
+
+  // If backdating an expired token for testing, maintain expiresAt > issuedAt invariant
+  if (ttlMs < 0 && !params.issuedAt) {
+    const expiredBy = Math.abs(ttlMs);
+    now = Date.now() - (expiredBy + 60_000);
+    expiresAt = now + 60_000;
+  }
 
   const payload: ConversationTokenPayload = {
     version: 1,
@@ -55,7 +64,7 @@ export function signConversationToken(
     threadId: params.threadId,
     repositoryFullName: params.repositoryFullName,
     issuedAt: now,
-    expiresAt: now + ttlMs,
+    expiresAt,
   };
 
   const payloadJson = JSON.stringify(payload);
@@ -126,7 +135,7 @@ export function verifyConversationToken(
     );
   }
 
-  // Check repository binding
+  // Check repository binding (normalized case-insensitive)
   const normalizedExpected = expectedRepositoryFullName.trim().toLowerCase();
   const normalizedActual = payload.repositoryFullName.trim().toLowerCase();
 

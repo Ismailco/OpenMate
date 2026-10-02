@@ -14,8 +14,9 @@ export interface UploadedThreadDocument {
 }
 
 /**
- * Serializes the bounded RepositoryContext, writes a temporary file in the OS temp directory,
- * uploads it to the Backboard thread for RAG indexing, and guarantees temporary file deletion.
+ * Serializes the bounded RepositoryContext, writes a temporary file in the OS temp directory
+ * with restrictive permissions (0o600) and random UUID, uploads it to the Backboard thread for RAG
+ * indexing, and guarantees temporary file deletion in a finally block.
  */
 export async function uploadRepositoryContextToThread(
   client: BackboardAssistantClientLike,
@@ -27,7 +28,11 @@ export async function uploadRepositoryContextToThread(
   const tmpFilePath = path.join(os.tmpdir(), `openmate-rag-${randomSuffix}.txt`);
 
   try {
-    fs.writeFileSync(tmpFilePath, serializedContext, 'utf-8');
+    fs.writeFileSync(tmpFilePath, serializedContext, {
+      encoding: 'utf-8',
+      mode: 0o600,
+      flag: 'wx',
+    });
 
     const uploaded = await client.uploadDocumentToThread(threadId, tmpFilePath);
     return {

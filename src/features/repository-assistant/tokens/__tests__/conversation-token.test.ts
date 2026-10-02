@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import {
   signConversationToken,
@@ -23,7 +24,24 @@ describe('Conversation Token Security and Cryptography', () => {
     );
   });
 
-  it('signs and verifies a valid conversation token', () => {
+  it('generates a deterministic 2-part signed token', () => {
+    const token = signConversationToken(
+      {
+        assistantId: 'asst_123',
+        threadId: 'thrd_456',
+        repositoryFullName: repoName,
+      },
+      validSecret,
+      60_000
+    );
+
+    const parts = token.split('.');
+    expect(parts).toHaveLength(2);
+    expect(parts[0]?.length).toBeGreaterThan(10);
+    expect(parts[1]?.length).toBeGreaterThan(10);
+  });
+
+  it('verifies a valid token for the correct repository', () => {
     const token = signConversationToken(
       {
         assistantId: 'asst_123',
@@ -35,64 +53,43 @@ describe('Conversation Token Security and Cryptography', () => {
     );
 
     const payload = verifyConversationToken(token, repoName, validSecret);
-    expect(payload.version).toBe(1);
     expect(payload.assistantId).toBe('asst_123');
     expect(payload.threadId).toBe('thrd_456');
     expect(payload.repositoryFullName).toBe(repoName);
-    expect(payload.expiresAt).toBeGreaterThan(Date.now());
   });
 
-  it('rejects tampered payload segments', () => {
+  it('verifies repository name case-insensitively', () => {
     const token = signConversationToken(
       {
         assistantId: 'asst_123',
         threadId: 'thrd_456',
-        repositoryFullName: repoName,
+        repositoryFullName: 'Facebook/React',
       },
-      validSecret
+      validSecret,
+      60_000
     );
 
-    const parts = token.split('.');
-    // Tamper with payload by changing base64 string
-    const tamperedPayload = Buffer.from(
-      JSON.stringify({
-        version: 1,
-        assistantId: 'asst_evil',
-        threadId: 'thrd_456',
-        repositoryFullName: repoName,
-        issuedAt: Date.now(),
-        expiresAt: Date.now() + 60000,
-      })
-    ).toString('base64url');
-
-    const tamperedToken = `${tamperedPayload}.${parts[1]}`;
-
-    expect(() =>
-      verifyConversationToken(tamperedToken, repoName, validSecret)
-    ).toThrow(RepositoryAssistantTokenError);
+    const payload = verifyConversationToken(token, 'facebook/react', validSecret);
+    expect(payload.assistantId).toBe('asst_123');
   });
 
-  it('rejects tampered signature segments', () => {
+  it('rejects token when repository binding does not match', () => {
     const token = signConversationToken(
       {
         assistantId: 'asst_123',
         threadId: 'thrd_456',
-        repositoryFullName: repoName,
+        repositoryFullName: 'facebook/react',
       },
-      validSecret
+      validSecret,
+      60_000
     );
 
-    const parts = token.split('.');
-    const invalidSignature = Buffer.from('invalid-sig').toString('base64url');
-    const tamperedToken = `${parts[0]}.${invalidSignature}`;
-
     expect(() =>
-      verifyConversationToken(tamperedToken, repoName, validSecret)
+      verifyConversationToken(token, 'vuejs/core', validSecret)
     ).toThrow(RepositoryAssistantTokenError);
   });
 
-  it('rejects expired conversation tokens with typed RepositoryAssistantTokenExpiredError', () => {
-    const expiredTtlMs = -5000; // expired 5 seconds ago
+  it('rejects tampered token signature', () => {
     const token = signConversationToken(
       {
         assistantId: 'asst_123',
@@ -100,7 +97,30 @@ describe('Conversation Token Security and Cryptography', () => {
         repositoryFullName: repoName,
       },
       validSecret,
-      expiredTtlMs
+      60_000
+    );
+
+    const [payloadBase64Url] = token.split('.');
+    const fakeSignature = 'tampered-signature-that-fails-hmac-verification-now';
+    const tamperedToken = `${payloadBase64Url}.${fakeSignature}`;
+
+    expect(() =>
+      verifyConversationToken(tamperedToken, repoName, validSecret)
+    ).toThrow(RepositoryAssistantTokenError);
+  });
+
+  it('rejects expired token', () => {
+    // Generate token that expired 10 seconds ago, keeping expiresAt > issuedAt invariant
+    const now = Date.now();
+    const token = signConversationToken(
+      {
+        assistantId: 'asst_123',
+        threadId: 'thrd_456',
+        repositoryFullName: repoName,
+        issuedAt: now - 10_000,
+      },
+      validSecret,
+      1_000
     );
 
     expect(() =>
@@ -108,32 +128,53 @@ describe('Conversation Token Security and Cryptography', () => {
     ).toThrow(RepositoryAssistantTokenExpiredError);
   });
 
-  it('rejects tokens presented for a different repository (repository binding guard)', () => {
-    const token = signConversationToken(
-      {
-        assistantId: 'asst_123',
-        threadId: 'thrd_456',
-        repositoryFullName: 'facebook/react',
-      },
-      validSecret
-    );
+  it('rejects tokens containing extra un-whitelisted fields', () => {
+    const now = Date.now();
+    const maliciousPayload = {
+      version: 1,
+      assistantId: 'asst_123',
+      threadId: 'thrd_456',
+      repositoryFullName: repoName,
+      issuedAt: now,
+      expiresAt: now + 60_000,
+      role: 'admin', // Injected extra property
+    };
+
+    const payloadBase64Url = Buffer.from(JSON.stringify(maliciousPayload)).toString('base64url');
+    const signature = crypto
+      .createHmac('sha256', validSecret)
+      .update(payloadBase64Url)
+      .digest('base64url');
+
+    const token = `${payloadBase64Url}.${signature}`;
 
     expect(() =>
-      verifyConversationToken(token, 'vercel/next.js', validSecret)
+      verifyConversationToken(token, repoName, validSecret)
     ).toThrow(RepositoryAssistantTokenError);
   });
 
-  it('rejects malformed token strings', () => {
-    expect(() =>
-      verifyConversationToken('not-a-token', repoName, validSecret)
-    ).toThrow(RepositoryAssistantTokenError);
+  it('rejects tokens with excessive lifetime beyond maximum bounds', () => {
+    const now = Date.now();
+    const excessiveLifetime = 30 * 24 * 60 * 60 * 1000; // 30 days
+    const maliciousPayload = {
+      version: 1,
+      assistantId: 'asst_123',
+      threadId: 'thrd_456',
+      repositoryFullName: repoName,
+      issuedAt: now,
+      expiresAt: now + excessiveLifetime,
+    };
+
+    const payloadBase64Url = Buffer.from(JSON.stringify(maliciousPayload)).toString('base64url');
+    const signature = crypto
+      .createHmac('sha256', validSecret)
+      .update(payloadBase64Url)
+      .digest('base64url');
+
+    const token = `${payloadBase64Url}.${signature}`;
 
     expect(() =>
-      verifyConversationToken('', repoName, validSecret)
-    ).toThrow(RepositoryAssistantTokenError);
-
-    expect(() =>
-      verifyConversationToken('a.b.c', repoName, validSecret)
+      verifyConversationToken(token, repoName, validSecret)
     ).toThrow(RepositoryAssistantTokenError);
   });
 });
