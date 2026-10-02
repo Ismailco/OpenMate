@@ -19,7 +19,8 @@ By analyzing public GitHub repositories alongside a developer's specific skills,
 - **Framework**: [Next.js](https://nextjs.org/) (App Router, React 19)
 - **Language**: TypeScript (strict configuration)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-- **Validation**: Zod (runtime boundary validation)
+- **Validation**: Zod (runtime boundary and domain schema validation)
+- **Testing**: Vitest & React Testing Library
 - **AI / Reasoning**: Gemma open-weight models via Backboard
 - **Deployment**: Render
 
@@ -34,8 +35,8 @@ By analyzing public GitHub repositories alongside a developer's specific skills,
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/openmate.git
-cd openmate
+git clone https://github.com/Ismailco/OpenMate.git
+cd OpenMate
 
 # Install dependencies
 pnpm install
@@ -57,6 +58,7 @@ Open [http://localhost:3000](http://localhost:3000) to view the application.
 ```bash
 pnpm lint       # Run ESLint
 pnpm typecheck  # Run TypeScript type check
+pnpm test       # Run Vitest test suite
 pnpm build      # Test production build
 ```
 
