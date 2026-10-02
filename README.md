@@ -21,7 +21,7 @@ By analyzing public GitHub repositories alongside a developer's specific skills,
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 - **Validation**: Zod (runtime boundary and domain schema validation)
 - **Testing**: Vitest & React Testing Library
-- **AI / Reasoning**: Gemma open-weight models via Backboard
+- **AI / Reasoning**: Google Gemma open-weight models (`google/gemma-3-27b-it`) via [Backboard](https://backboard.io)
 - **Deployment**: Render
 
 ## Repository Analysis Pipeline
@@ -34,7 +34,7 @@ GitHub REST Ingestion (Network & limits boundary)
 Repository Context Engine (Pure transformation, sanitization & character budgets)
   ↓ RepositoryContext & AI-safe serialization
 AI Synthesis & Reasoning (Phase 5 - Gemma via Backboard)
-  ↓
+  ↓ RepositoryAnalysis
 Personalized Contribution Guide (Phase 6)
 ```
 
@@ -53,6 +53,19 @@ The context engine (`src/features/repository-context`) transforms raw ingestion 
   - Representative source files: max 16,000 characters cumulative (max 4,000 per file)
   - Open issues: max 8,000 characters cumulative (max 15 issues, max 600 chars per body)
 - **Deterministic Prioritization**: Root entrypoints and shallow source files are prioritized over deeply nested utilities; `good first issue` and `help wanted` issues are prioritized for contribution onboarding.
+
+### AI Provider & Gemma Architecture (Phase 5)
+
+Repository analysis (`src/features/repository-analysis`) uses Google's open-weight **Gemma 3 27B** (`google/gemma-3-27b-it`) accessed through the **Backboard SDK**:
+
+- **Model Selection**: Official Google Gemma open-weight model with a 131,072-token context window, optimized for code reasoning and structured JSON output.
+- **Strict Isolation & Prompt Security**:
+  - The OpenMate system instructions and untrusted repository user data are strictly decoupled.
+  - Repository text (comments, README, issues) can never execute instructions, alter schemas, or request secrets.
+  - Zero proprietary fallback: if Gemma is unavailable, `AiModelUnavailableError` is returned to preserve open-weight integrity.
+- **Single-Inference Discipline**: Consolidated repository context is evaluated in a single primary model call with an optional single controlled repair turn if output formatting fails.
+- **Deterministic Path Grounding**: Hallucinated file paths in AI outputs are deterministically filtered against genuine repository tree and context paths.
+- **Safe API Endpoint**: `POST /api/repositories/analyze` ingests, contexts, and analyzes public repositories without exposing server secrets or raw source blobs to clients.
 
 ## Getting Started
 
@@ -75,13 +88,29 @@ pnpm install
 cp .env.example .env.local
 ```
 
-### Development
+### Environment Configuration
+
+In `.env.local`:
 
 ```bash
-pnpm dev
+# GitHub Access Token (optional for public repositories)
+GITHUB_TOKEN=
+
+# Backboard API Key for Gemma repository reasoning
+BACKBOARD_API_KEY=
+
+# Gemma model configuration (default: google/gemma-3-27b-it via openrouter)
+BACKBOARD_MODEL_PROVIDER=openrouter
+BACKBOARD_MODEL_NAME=google/gemma-3-27b-it
+BACKBOARD_TIMEOUT_MS=60000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the application.
+### Development & Model Catalog
+
+```bash
+pnpm dev                 # Run local Next.js dev server
+pnpm backboard:models    # Query available Gemma models
+```
 
 ### Validation Scripts
 
