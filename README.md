@@ -28,6 +28,8 @@ Zod Validation & Grounding Enforcement (profile, issue identity, paths)
 Client Session Storage (openmate.analysis.v1)
        ↓
 Personalized Contributor Dashboard (/repo)
+       ↓
+Ask OpenMate Conversational Assistant (Backboard RAG)
 ```
 
 ### 1. Developer Profile Domain
@@ -54,7 +56,7 @@ Personalized Contributor Dashboard (/repo)
 - **Actionable Guidance**: Every recommendation provides concrete starting investigation steps, concepts to understand, and cautions—without generating fake code solutions or precise fake hour estimates.
 - **Zero Proprietary Fallback**: Runs strictly on open-weight Gemma with no silent fallback to proprietary models.
 
-### 6. End-to-End Contributor Experience (Phase 7)
+### 6. End-to-End Contributor Experience
 - **Single-Pass Ingestion & Reasoning**: Submits user profile to `POST /api/repositories/analyze`, fetching GitHub data and executing Gemma reasoning in a single unified pipeline.
 - **Session Lifecycle & Security**: Uses versioned browser session storage (`openmate.analysis.v1`) scoped to the active tab. Sensitive credentials and raw repository dump contexts are never stored client-side. Corrupted or expired (24h) sessions are gracefully purged.
 - **Interactive State Transitions**: Smooth UI state machine (`editing` → `ready` → `analyzing` → `error`). Includes indeterminate progress indicators, request cancellation via `AbortController`, and retry/profile edit recovery flows.
@@ -64,12 +66,19 @@ Personalized Contributor Dashboard (/repo)
   - **Empty States**: Explicit guidance when no open issues or suitable candidates exist.
   - **Deep Repository Onboarding**: Repository overview, detected technology stack, architectural subsystems, first files to read, local setup command sequence, and glossary terms.
 
+### 7. Ask OpenMate Conversational Assistant
+- Grounded follow-up chat powered by Backboard RAG and Gemma 3 27B.
+- Cryptographically signed HMAC-SHA256 conversation tokens bound to the repository context.
+- Ephemeral RAG document lifetimes with automatic cleanup.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js >= 20
-- pnpm >= 9
+- Node.js >= 22.x
+- pnpm >= 11.x (`pnpm@11.7.0` pinned in `packageManager`)
 
 ### Installation
 
@@ -78,8 +87,8 @@ Personalized Contributor Dashboard (/repo)
 git clone https://github.com/Ismailco/OpenMate.git
 cd OpenMate
 
-# Install dependencies
-pnpm install
+# Install dependencies strictly from lockfile
+pnpm install --frozen-lockfile
 
 # Configure environment variables
 cp .env.example .env.local
@@ -100,6 +109,9 @@ BACKBOARD_API_KEY=
 BACKBOARD_MODEL_PROVIDER=openrouter
 BACKBOARD_MODEL_NAME=google/gemma-3-27b-it
 BACKBOARD_TIMEOUT_MS=60000
+
+# Chat conversation token HMAC secret (min 32 characters)
+OPENMATE_CHAT_SIGNING_SECRET=
 ```
 
 ### Development & Model Catalog
@@ -109,11 +121,31 @@ pnpm dev                 # Run local Next.js dev server
 pnpm backboard:models    # Query available Gemma models
 ```
 
-### Validation Scripts
+---
+
+## Testing & Quality Gates
+
+OpenMate maintains a complete multi-tier testing pipeline. **All automated tests run completely offline** with zero external network requests to GitHub, Backboard, OpenRouter, or Google. No live provider credentials or API keys are required for test execution.
 
 ```bash
-pnpm lint       # Run ESLint
-pnpm typecheck  # Run TypeScript type check
-pnpm test       # Run Vitest test suite (175 tests across 37 suites)
-pnpm build      # Run Next.js production build
+# Run unit & integration test suite (Vitest)
+pnpm test
+
+# Run browser E2E test suite (Playwright against production Next.js build)
+pnpm e2e
+
+# Run Playwright with interactive UI
+pnpm e2e:ui
+
+# View latest Playwright HTML report
+pnpm e2e:report
+
+# Run complete quality validation gate
+pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e
 ```
+
+### Test Architecture
+
+- **Unit & Integration Suite (Vitest)**: Tests domain logic, schema validation, ingestion boundaries, candidate ranking heuristics, RAG context formatting, and HMAC token signing.
+- **Browser E2E Suite (Playwright + Chromium)**: Launches a real production build (`pnpm build` + `next start`) with HTTP security headers and CSP enabled. Tests full onboarding navigation, sessionStorage handoff, results rendering, chat lifecycle, error recovery, mobile viewport (375×812), and XSS neutralization.
+- **GitHub Actions CI (`.github/workflows/ci.yml`)**: Parallel quality gate (lint, typecheck, unit tests) and browser E2E gate on every push and pull request targeting `main`. Completely fork-friendly with least-privilege permissions and zero required repository secrets.
