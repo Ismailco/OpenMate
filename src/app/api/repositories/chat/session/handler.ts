@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { type NextResponse } from 'next/server';
 import { InitializeChatRequestSchema, DeleteChatSessionRequestSchema } from '@/features/repository-assistant/schemas';
 import {
   initializeRepositoryChat,
@@ -18,17 +18,26 @@ import {
   RepositoryNotFoundError,
   GitHubRateLimitError,
 } from '@/features/github/errors';
+import {
+  validateApiRequestHeaders,
+  createSafeJsonResponse,
+} from '@/lib/api-security';
 
 export async function handleInitializeChatRequest(
   request: Request,
   deps: InitializeRepositoryChatDependencies = {}
 ): Promise<NextResponse> {
   try {
+    const headerValidation = validateApiRequestHeaders(request);
+    if (!headerValidation.valid && headerValidation.response) {
+      return headerValidation.response;
+    }
+
     let body: unknown;
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'InvalidJson', message: 'Request body must be valid JSON.' },
         { status: 400 }
       );
@@ -36,7 +45,7 @@ export async function handleInitializeChatRequest(
 
     const parsed = InitializeChatRequestSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         {
           error: 'ValidationError',
           message: 'Invalid developer profile payload.',
@@ -47,51 +56,51 @@ export async function handleInitializeChatRequest(
     }
 
     const result = await initializeRepositoryChat(parsed.data.profile, deps);
-    return NextResponse.json(result, { status: 200 });
+    return createSafeJsonResponse(result, { status: 200 });
   } catch (error) {
     if (error instanceof RepositoryNotFoundError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'RepositoryNotFound', message: error.message },
         { status: 404 }
       );
     }
 
     if (error instanceof GitHubRateLimitError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'RateLimited', message: 'GitHub API rate limit exceeded. Please try again later.' },
         { status: 429 }
       );
     }
 
     if (error instanceof RepositoryAssistantConfigurationError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'ConfigurationError', message: 'Assistant service is misconfigured.' },
         { status: 503 }
       );
     }
 
-    if (error instanceof RepositoryAssistantIndexingError) {
-      return NextResponse.json(
-        { error: 'IndexingError', message: error.message },
-        { status: 502 }
-      );
-    }
-
     if (error instanceof RepositoryAssistantTimeoutError) {
-      return NextResponse.json(
-        { error: 'TimeoutError', message: 'Indexing timed out. Please try again.' },
+      return createSafeJsonResponse(
+        { error: 'TimeoutError', message: error.message },
         { status: 504 }
       );
     }
 
-    if (error instanceof RepositoryAssistantInitializationError) {
-      return NextResponse.json(
-        { error: 'InitializationError', message: error.message },
+    if (error instanceof RepositoryAssistantIndexingError) {
+      return createSafeJsonResponse(
+        { error: 'IndexingError', message: 'Context indexing failed for the repository.' },
         { status: 502 }
       );
     }
 
-    return NextResponse.json(
+    if (error instanceof RepositoryAssistantInitializationError) {
+      return createSafeJsonResponse(
+        { error: 'InitializationError', message: 'Failed to initialize repository assistant session.' },
+        { status: 502 }
+      );
+    }
+
+    return createSafeJsonResponse(
       {
         error: 'InternalError',
         message: 'An unexpected error occurred while preparing the repository assistant.',
@@ -106,11 +115,16 @@ export async function handleDeleteChatSessionRequest(
   deps: CleanupRepositoryChatDependencies = {}
 ): Promise<NextResponse> {
   try {
+    const headerValidation = validateApiRequestHeaders(request);
+    if (!headerValidation.valid && headerValidation.response) {
+      return headerValidation.response;
+    }
+
     let body: unknown;
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'InvalidJson', message: 'Request body must be valid JSON.' },
         { status: 400 }
       );
@@ -118,15 +132,15 @@ export async function handleDeleteChatSessionRequest(
 
     const parsed = DeleteChatSessionRequestSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'ValidationError', message: 'Invalid delete chat session payload.' },
         { status: 422 }
       );
     }
 
     await cleanupRepositoryChat(parsed.data.conversationToken, deps);
-    return NextResponse.json({ success: true }, { status: 200 });
+    return createSafeJsonResponse({ success: true }, { status: 200 });
   } catch {
-    return NextResponse.json({ success: true }, { status: 200 });
+    return createSafeJsonResponse({ success: true }, { status: 200 });
   }
 }

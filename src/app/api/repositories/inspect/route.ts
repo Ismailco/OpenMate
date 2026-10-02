@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { NormalizedRepositorySchema } from '@/features/developer-profile/schemas';
 import { ingestGitHubRepository } from '@/features/github';
 import {
@@ -8,13 +7,30 @@ import {
   RepositoryAccessError,
   RepositoryNotFoundError,
 } from '@/features/github/errors';
+import {
+  validateApiRequestHeaders,
+  createSafeJsonResponse,
+} from '@/lib/api-security';
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as unknown;
+    const headerValidation = validateApiRequestHeaders(request);
+    if (!headerValidation.valid && headerValidation.response) {
+      return headerValidation.response;
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return createSafeJsonResponse(
+        { error: 'Request body must be valid JSON.', code: 'INVALID_JSON' },
+        { status: 400 }
+      );
+    }
 
     if (!body || typeof body !== 'object' || !('repository' in body)) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'Missing repository field in request payload.' },
         { status: 400 }
       );
@@ -25,7 +41,7 @@ export async function POST(request: Request) {
     );
 
     if (!parseResult.success) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         {
           error: 'Invalid repository specification.',
           details: parseResult.error.issues.map((i) => i.message),
@@ -38,7 +54,7 @@ export async function POST(request: Request) {
     const ingested = await ingestGitHubRepository(repository);
 
     // Return a safe summary without dumping massive raw source blobs into browser
-    return NextResponse.json({
+    return createSafeJsonResponse({
       success: true,
       data: {
         metadata: ingested.metadata,
@@ -57,44 +73,42 @@ export async function POST(request: Request) {
     });
   } catch (err: unknown) {
     if (err instanceof RepositoryNotFoundError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: err.message, code: 'REPOSITORY_NOT_FOUND' },
         { status: 404 }
       );
     }
 
     if (err instanceof RepositoryAccessError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: err.message, code: 'REPOSITORY_ACCESS_DENIED' },
         { status: 403 }
       );
     }
 
     if (err instanceof GitHubRateLimitError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: err.message, code: 'RATE_LIMIT_EXCEEDED' },
         { status: 429 }
       );
     }
 
     if (err instanceof GitHubAuthenticationError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: err.message, code: 'AUTHENTICATION_ERROR' },
         { status: 401 }
       );
     }
 
     if (err instanceof GitHubTimeoutError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: err.message, code: 'REQUEST_TIMEOUT' },
         { status: 408 }
       );
     }
 
-    const message =
-      err instanceof Error ? err.message : 'Internal repository inspection failure.';
-    return NextResponse.json(
-      { error: message, code: 'INTERNAL_ERROR' },
+    return createSafeJsonResponse(
+      { error: 'Internal repository inspection failure.', code: 'INTERNAL_ERROR' },
       { status: 500 }
     );
   }

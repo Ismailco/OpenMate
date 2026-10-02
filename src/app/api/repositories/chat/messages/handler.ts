@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { type NextResponse } from 'next/server';
 import { SendChatMessageRequestSchema } from '@/features/repository-assistant/schemas';
 import {
   answerRepositoryQuestion,
@@ -12,17 +12,26 @@ import {
   RepositoryAssistantTokenError,
   RepositoryAssistantTokenExpiredError,
 } from '@/features/repository-assistant/errors';
+import {
+  validateApiRequestHeaders,
+  createSafeJsonResponse,
+} from '@/lib/api-security';
 
 export async function handleSendChatMessageRequest(
   request: Request,
   deps: AnswerRepositoryQuestionDependencies = {}
 ): Promise<NextResponse> {
   try {
+    const headerValidation = validateApiRequestHeaders(request);
+    if (!headerValidation.valid && headerValidation.response) {
+      return headerValidation.response;
+    }
+
     let body: unknown;
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'InvalidJson', message: 'Request body must be valid JSON.' },
         { status: 400 }
       );
@@ -30,7 +39,7 @@ export async function handleSendChatMessageRequest(
 
     const parsed = SendChatMessageRequestSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         {
           error: 'ValidationError',
           message: 'Invalid message request payload.',
@@ -41,51 +50,51 @@ export async function handleSendChatMessageRequest(
     }
 
     const answer = await answerRepositoryQuestion(parsed.data, deps);
-    return NextResponse.json(answer, { status: 200 });
+    return createSafeJsonResponse(answer, { status: 200 });
   } catch (error) {
     if (error instanceof RepositoryAssistantTokenExpiredError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'TokenExpired', message: error.message },
         { status: 410 }
       );
     }
 
     if (error instanceof RepositoryAssistantTokenError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'UnauthorizedToken', message: error.message },
         { status: 401 }
       );
     }
 
     if (error instanceof RepositoryAssistantConfigurationError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'ConfigurationError', message: 'Assistant service is misconfigured.' },
         { status: 503 }
       );
     }
 
     if (error instanceof RepositoryAssistantTimeoutError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'TimeoutError', message: 'Assistant response timed out.' },
         { status: 504 }
       );
     }
 
     if (error instanceof RepositoryAssistantInvalidResponseError) {
-      return NextResponse.json(
+      return createSafeJsonResponse(
         { error: 'InvalidResponse', message: 'Provider returned an unreadable response structure.' },
         { status: 502 }
       );
     }
 
     if (error instanceof RepositoryAssistantProviderError) {
-      return NextResponse.json(
-        { error: 'ProviderError', message: error.message },
+      return createSafeJsonResponse(
+        { error: 'ProviderError', message: 'The AI assistant provider reported an upstream service failure.' },
         { status: 502 }
       );
     }
 
-    return NextResponse.json(
+    return createSafeJsonResponse(
       {
         error: 'InternalError',
         message: 'An unexpected error occurred while communicating with the assistant.',
