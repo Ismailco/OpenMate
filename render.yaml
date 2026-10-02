@@ -24,3 +24,9 @@ services:
         sync: false
       - key: OPENMATE_CHAT_SIGNING_SECRET
         generateValue: true
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: production
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: "1.0"

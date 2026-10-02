@@ -20,6 +20,7 @@
     "backboard:models": "node scripts/list-gemma-models.mjs"
   },
   "dependencies": {
+    "@sentry/nextjs": "^11.4.0",
     "backboard-sdk": "^1.5.19",
     "next": "16.3.8",
     "react": "19.2.8",
