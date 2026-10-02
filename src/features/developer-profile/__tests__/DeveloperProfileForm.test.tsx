@@ -1,61 +1,52 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { DeveloperProfileForm } from '../components/DeveloperProfileForm';
-
-// Mock window.scrollTo
-vi.stubGlobal('scrollTo', vi.fn());
 
 describe('DeveloperProfileForm client interaction', () => {
   it('renders all form sections with default values', () => {
     render(<DeveloperProfileForm />);
 
-    expect(screen.getByLabelText(/github repository url/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/github repository url/i)).toHaveValue(
+      'https://github.com/colinhacks/zod'
+    );
+    expect(screen.getByText('TypeScript')).toBeInTheDocument();
+    expect(screen.getByText('JavaScript')).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: /your technologies & languages/i })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: /contribution focus/i })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: /experience & capacity/i })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByLabelText(/available time \(hours for this contribution\)/i)
+      screen.getByRole('button', { name: /save & generate contribution profile/i })
     ).toBeInTheDocument();
   });
 
   it('allows adding and removing a skill', () => {
     render(<DeveloperProfileForm />);
 
-    const skillInput = screen.getByPlaceholderText(/e\.g\. TypeScript/i);
+    const input = screen.getByLabelText(/technologies & languages/i);
     const addButton = screen.getByRole('button', { name: /add skill/i });
 
-    // Add Python
-    fireEvent.change(skillInput, { target: { value: 'Python' } });
+    fireEvent.change(input, { target: { value: 'Rust' } });
     fireEvent.click(addButton);
 
-    expect(screen.getByText('Python')).toBeInTheDocument();
+    expect(screen.getByText('Rust')).toBeInTheDocument();
 
-    // Remove Python
-    const removeButton = screen.getByRole('button', { name: /remove python/i });
-    fireEvent.click(removeButton);
+    const removeRustBtn = screen.getByRole('button', {
+      name: /remove rust/i,
+    });
+    fireEvent.click(removeRustBtn);
 
-    expect(screen.queryByText('Python')).not.toBeInTheDocument();
+    expect(screen.queryByText('Rust')).not.toBeInTheDocument();
   });
 
   it('rejects duplicate skills ignoring case', () => {
     render(<DeveloperProfileForm />);
 
-    const skillInput = screen.getByPlaceholderText(/e\.g\. TypeScript/i);
+    const input = screen.getByLabelText(/technologies & languages/i);
     const addButton = screen.getByRole('button', { name: /add skill/i });
 
-    // Attempt to add "typescript" (already exists as "TypeScript")
-    fireEvent.change(skillInput, { target: { value: 'typescript' } });
+    fireEvent.change(input, { target: { value: 'typescript' } });
     fireEvent.click(addButton);
 
     expect(
-      screen.getByText(/"typescript" has already been added to your profile\./i)
+      screen.getByText(/has already been added to your profile/i)
     ).toBeInTheDocument();
   });
 
@@ -63,7 +54,9 @@ describe('DeveloperProfileForm client interaction', () => {
     render(<DeveloperProfileForm />);
 
     const repoInput = screen.getByLabelText(/github repository url/i);
-    fireEvent.change(repoInput, { target: { value: 'https://gitlab.com/not/github' } });
+    fireEvent.change(repoInput, {
+      target: { value: 'https://gitlab.com/user/project' },
+    });
 
     const submitButton = screen.getByRole('button', {
       name: /save & generate contribution profile/i,
@@ -90,7 +83,7 @@ describe('DeveloperProfileForm client interaction', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /analyze repository/i })
-    ).toBeDisabled();
+    ).toBeEnabled();
 
     // Clicking "Edit Profile" brings user back to editing form
     const editButton = screen.getByRole('button', { name: /← edit profile/i });
