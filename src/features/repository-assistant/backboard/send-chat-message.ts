@@ -6,6 +6,7 @@ import type {
   BackboardAssistantConfig,
 } from './client';
 import type { RepositoryAssistantAnswer } from '../types';
+import { withAiSpan, deriveSafeConversationId } from '@/features/observability';
 
 export interface SendChatMessageParams {
   threadId: string;
@@ -40,23 +41,57 @@ export async function sendChatMessageToThread(
   params: SendChatMessageParams,
   config: BackboardAssistantConfig
 ): Promise<RepositoryAssistantAnswer> {
-  try {
-    const threadResponse = await client.sendMessage({
-      threadId: params.threadId,
-      content: params.content,
-      model: config.modelName ?? BACKBOARD_DEFAULT_MODEL,
-      memory: 'off',
-      web_search: 'off',
-    });
+  const modelName = config.modelName ?? BACKBOARD_DEFAULT_MODEL;
+  const safeConversationId = deriveSafeConversationId(params.threadId);
 
-    const sanitizedAnswer = sanitizeAssistantResponse(threadResponse.content ?? '');
+  return withAiSpan(
+    {
+      name: 'Ask OpenMate generation',
+      model: modelName,
+      system: 'openrouter',
+      operationType: 'ai_client',
+      conversationId: safeConversationId,
+      attributes: {
+        'openmate.repository.full_name': params.repositoryFullName,
+      },
+    },
+    async (aiSpan) => {
+      try {
+        const threadResponse = (await client.sendMessage({
+          threadId: params.threadId,
+          content: params.content,
+          model: modelName,
+          memory: 'off',
+          web_search: 'off',
+        })) as {
+          content?: string;
+          modelName?: string;
+          inputTokens?: number;
+          outputTokens?: number;
+          totalTokens?: number;
+        };
 
-    return {
-      message: sanitizedAnswer,
-      model: config.modelName ?? BACKBOARD_DEFAULT_MODEL,
-    };
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new RepositoryAssistantError(`Failed to receive assistant reply: ${message}`);
-  }
+        if (threadResponse) {
+          if (typeof threadResponse.modelName === 'string') {
+            aiSpan.setResponseModel(threadResponse.modelName);
+          }
+          aiSpan.recordTokenUsage({
+            inputTokens: typeof threadResponse.inputTokens === 'number' ? threadResponse.inputTokens : undefined,
+            outputTokens: typeof threadResponse.outputTokens === 'number' ? threadResponse.outputTokens : undefined,
+            totalTokens: typeof threadResponse.totalTokens === 'number' ? threadResponse.totalTokens : undefined,
+          });
+        }
+
+        const sanitizedAnswer = sanitizeAssistantResponse(threadResponse?.content ?? '');
+
+        return {
+          message: sanitizedAnswer,
+          model: modelName,
+        };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new RepositoryAssistantError(`Failed to receive assistant reply: ${message}`);
+      }
+    }
+  );
 }

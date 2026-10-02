@@ -19,6 +19,7 @@ import {
   AiRateLimitError,
   AiTimeoutError,
 } from '../../errors';
+import { withAiSpan } from '../../../observability';
 
 export interface BackboardClientLike {
   sendMessage(options: {
@@ -67,58 +68,101 @@ export class BackboardRepositoryAnalyzer implements RepositoryAnalyzer {
 
     const userPrompt = buildRepositoryAnalysisUserPrompt(context);
 
-    let rawOutput: string;
-    try {
-      const response = await this.client.sendMessage({
-        content: userPrompt,
-        system_prompt: REPOSITORY_ANALYSIS_SYSTEM_PROMPT,
-        llm_provider: this.config.modelProvider,
-        model_name: this.config.modelName,
-        stream: false,
-        memory: 'off',
-        web_search: 'off',
-        json_output: true,
-      });
+    return withAiSpan(
+      {
+        name: 'Gemma repository analysis',
+        model: this.config.modelName,
+        system: 'openrouter',
+        operationType: 'ai_client',
+      },
+      async (aiSpan) => {
+        let rawOutput: string;
+        try {
+          const response = await this.client.sendMessage({
+            content: userPrompt,
+            system_prompt: REPOSITORY_ANALYSIS_SYSTEM_PROMPT,
+            llm_provider: this.config.modelProvider,
+            model_name: this.config.modelName,
+            stream: false,
+            memory: 'off',
+            web_search: 'off',
+            json_output: true,
+          });
 
-      rawOutput = this.extractResponseText(response);
-    } catch (err: unknown) {
-      this.mapAndRethrowError(err);
+          this.extractAndRecordMetadata(response, aiSpan);
+          rawOutput = this.extractResponseText(response);
+        } catch (err: unknown) {
+          this.mapAndRethrowError(err);
+        }
+
+        if (options?.signal?.aborted) {
+          throw new AiTimeoutError('Analysis aborted by caller signal.');
+        }
+
+        let rawAnalysis;
+        try {
+          rawAnalysis = parseRawAnalysisResponse(rawOutput);
+        } catch (err) {
+          // Perform at most one controlled repair attempt if output looks like JSON
+          if (
+            err instanceof AiInvalidResponseError &&
+            rawOutput.includes('{') &&
+            rawOutput.includes('}')
+          ) {
+            aiSpan.recordRepair(true);
+            try {
+              rawAnalysis = await this.attemptControlledRepair(rawOutput, err.message, aiSpan);
+              aiSpan.recordRepair(true, true);
+            } catch (repairError) {
+              aiSpan.recordRepair(true, false);
+              throw repairError;
+            }
+          } else {
+            throw err;
+          }
+        }
+
+        // Sanitize and validate repository paths against genuine context
+        const sanitizedAnalysis = validateAnalysisPaths(rawAnalysis, context);
+
+        const fullAnalysis: RepositoryAnalysis = {
+          ...sanitizedAnalysis,
+          analysisMetadata: {
+            modelProvider: this.config.modelProvider,
+            modelName: this.config.modelName,
+            analyzedAt: new Date().toISOString(),
+          },
+        };
+
+        // Final schema verification
+        return RepositoryAnalysisSchema.parse(fullAnalysis);
+      }
+    );
+  }
+
+  private extractAndRecordMetadata(
+    response: unknown,
+    aiSpan: {
+      recordTokenUsage: (usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number }) => void;
+      setResponseModel: (model: string) => void;
     }
+  ): void {
+    if (!response || typeof response !== 'object') return;
+    const resObj = response as Record<string, unknown>;
 
-    if (options?.signal?.aborted) {
-      throw new AiTimeoutError('Analysis aborted by caller signal.');
-    }
-
-    let rawAnalysis;
-    try {
-      rawAnalysis = parseRawAnalysisResponse(rawOutput);
-    } catch (err) {
-      // Perform at most one controlled repair attempt if output looks like JSON
-      if (
-        err instanceof AiInvalidResponseError &&
-        rawOutput.includes('{') &&
-        rawOutput.includes('}')
-      ) {
-        rawAnalysis = await this.attemptControlledRepair(rawOutput, err.message);
-      } else {
-        throw err;
+    if (Array.isArray(resObj.messages) && resObj.messages.length > 0) {
+      const last = resObj.messages[resObj.messages.length - 1] as Record<string, unknown> | undefined;
+      if (last) {
+        if (typeof last.modelName === 'string') {
+          aiSpan.setResponseModel(last.modelName);
+        }
+        aiSpan.recordTokenUsage({
+          inputTokens: typeof last.inputTokens === 'number' ? last.inputTokens : undefined,
+          outputTokens: typeof last.outputTokens === 'number' ? last.outputTokens : undefined,
+          totalTokens: typeof last.totalTokens === 'number' ? last.totalTokens : undefined,
+        });
       }
     }
-
-    // Sanitize and validate repository paths against genuine context
-    const sanitizedAnalysis = validateAnalysisPaths(rawAnalysis, context);
-
-    const fullAnalysis: RepositoryAnalysis = {
-      ...sanitizedAnalysis,
-      analysisMetadata: {
-        modelProvider: this.config.modelProvider,
-        modelName: this.config.modelName,
-        analyzedAt: new Date().toISOString(),
-      },
-    };
-
-    // Final schema verification
-    return RepositoryAnalysisSchema.parse(fullAnalysis);
   }
 
   private extractResponseText(response: unknown): string {
@@ -157,15 +201,13 @@ export class BackboardRepositoryAnalyzer implements RepositoryAnalyzer {
 
   private async attemptControlledRepair(
     invalidOutput: string,
-    validationError: string
+    validationError: string,
+    aiSpan?: {
+      recordTokenUsage: (usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number }) => void;
+      setResponseModel: (model: string) => void;
+    }
   ) {
-    const repairPrompt = `Your previous JSON output failed validation with the following error:
-${validationError}
-
-Please repair the JSON to strictly conform to the required RepositoryAnalysis schema:
-${invalidOutput.slice(0, 10_000)}
-
-Output ONLY the repaired valid JSON object.`;
+    const repairPrompt = `Your previous JSON output failed validation with the following error:\n${validationError}\n\nPlease repair the JSON to strictly conform to the required RepositoryAnalysis schema:\n${invalidOutput.slice(0, 10_000)}\n\nOutput ONLY the repaired valid JSON object.`;
 
     try {
       const response = await this.client.sendMessage({
@@ -178,6 +220,10 @@ Output ONLY the repaired valid JSON object.`;
         web_search: 'off',
         json_output: true,
       });
+
+      if (aiSpan) {
+        this.extractAndRecordMetadata(response, aiSpan);
+      }
 
       const repairedText = this.extractResponseText(response);
       return parseRawAnalysisResponse(repairedText);

@@ -26,6 +26,7 @@ import { buildRecommendationUserPrompt } from '../prompts/recommendation-prompt'
 import { parseRawRecommendationResponse } from '../parsing/parse-recommendation-response';
 import { validateAndGroundRecommendations } from '../parsing/validate-recommendations';
 import { RawRecommendationsResponse } from '../schema';
+import { withAiSpan } from '../../observability';
 
 export class GemmaContributionRecommender implements ContributionRecommender {
   private readonly client: BackboardClientLike;
@@ -72,50 +73,100 @@ export class GemmaContributionRecommender implements ContributionRecommender {
       context
     );
 
-    let rawOutput: string;
-    try {
-      const response = await this.client.sendMessage({
-        content: userPrompt,
-        system_prompt: RECOMMENDATION_SYSTEM_PROMPT,
-        llm_provider: this.config.modelProvider,
-        model_name: this.config.modelName,
-        stream: false,
-        memory: 'off',
-        web_search: 'off',
-        json_output: true,
-      });
+    return withAiSpan(
+      {
+        name: 'Gemma contribution recommendation',
+        model: this.config.modelName,
+        system: 'openrouter',
+        operationType: 'ai_client',
+        attributes: {
+          'openmate.recommendation.candidate_count': candidates.length,
+        },
+      },
+      async (aiSpan) => {
+        let rawOutput: string;
+        try {
+          const response = await this.client.sendMessage({
+            content: userPrompt,
+            system_prompt: RECOMMENDATION_SYSTEM_PROMPT,
+            llm_provider: this.config.modelProvider,
+            model_name: this.config.modelName,
+            stream: false,
+            memory: 'off',
+            web_search: 'off',
+            json_output: true,
+          });
 
-      rawOutput = this.extractResponseText(response);
-    } catch (err: unknown) {
-      this.mapAndRethrowError(err);
-    }
+          this.extractAndRecordMetadata(response, aiSpan);
+          rawOutput = this.extractResponseText(response);
+        } catch (err: unknown) {
+          this.mapAndRethrowError(err);
+        }
 
-    if (options?.signal?.aborted) {
-      throw new AiTimeoutError('Recommendation aborted by caller signal.');
-    }
+        if (options?.signal?.aborted) {
+          throw new AiTimeoutError('Recommendation aborted by caller signal.');
+        }
 
-    let parsedResponse: RawRecommendationsResponse;
-    try {
-      parsedResponse = parseRawRecommendationResponse(rawOutput);
-    } catch (err) {
-      // Execute at most one controlled repair attempt if output has JSON markers
-      if (rawOutput.includes('{') && rawOutput.includes('}')) {
-        parsedResponse = await this.attemptControlledRepair(
-          rawOutput,
-          err instanceof Error ? err.message : String(err)
+        let parsedResponse: RawRecommendationsResponse;
+        try {
+          parsedResponse = parseRawRecommendationResponse(rawOutput);
+        } catch (err) {
+          // Execute at most one controlled repair attempt if output has JSON markers
+          if (rawOutput.includes('{') && rawOutput.includes('}')) {
+            aiSpan.recordRepair(true);
+            try {
+              parsedResponse = await this.attemptControlledRepair(
+                rawOutput,
+                err instanceof Error ? err.message : String(err),
+                aiSpan
+              );
+              aiSpan.recordRepair(true, true);
+            } catch (repairError) {
+              aiSpan.recordRepair(true, false);
+              throw repairError;
+            }
+          } else {
+            throw err;
+          }
+        }
+
+        // Ground and validate recommendations against application and context data
+        const validated = validateAndGroundRecommendations(
+          parsedResponse,
+          candidates,
+          profile,
+          context
         );
-      } else {
-        throw err;
+
+        aiSpan.setAttribute('openmate.recommendation.result_count', validated.length);
+        return validated;
+      }
+    );
+  }
+
+  private extractAndRecordMetadata(
+    response: unknown,
+    aiSpan: {
+      recordTokenUsage: (usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number }) => void;
+      setResponseModel: (model: string) => void;
+    }
+  ): void {
+    if (!response || typeof response !== 'object') return;
+    const resObj = response as Record<string, unknown>;
+
+    if (Array.isArray(resObj.messages) && resObj.messages.length > 0) {
+      const last = resObj.messages[resObj.messages.length - 1] as Record<string, unknown> | undefined;
+      if (last) {
+        if (typeof last.modelName === 'string') {
+          aiSpan.setResponseModel(last.modelName);
+        }
+        aiSpan.recordTokenUsage({
+          inputTokens: typeof last.inputTokens === 'number' ? last.inputTokens : undefined,
+          outputTokens: typeof last.outputTokens === 'number' ? last.outputTokens : undefined,
+          totalTokens: typeof last.totalTokens === 'number' ? last.totalTokens : undefined,
+        });
       }
     }
-
-    // Ground and validate recommendations against application and context data
-    return validateAndGroundRecommendations(
-      parsedResponse,
-      candidates,
-      profile,
-      context
-    );
   }
 
   private extractResponseText(response: unknown): string {
@@ -154,15 +205,13 @@ export class GemmaContributionRecommender implements ContributionRecommender {
 
   private async attemptControlledRepair(
     invalidOutput: string,
-    validationError: string
+    validationError: string,
+    aiSpan?: {
+      recordTokenUsage: (usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number }) => void;
+      setResponseModel: (model: string) => void;
+    }
   ): Promise<RawRecommendationsResponse> {
-    const repairPrompt = `Your previous JSON output failed validation with the following error:
-${validationError}
-
-Please repair the JSON to strictly conform to the required recommendations schema:
-${invalidOutput.slice(0, 10_000)}
-
-Output ONLY the repaired valid JSON object.`;
+    const repairPrompt = `Your previous JSON output failed validation with the following error:\n${validationError}\n\nPlease repair the JSON to strictly conform to the required recommendations schema:\n${invalidOutput.slice(0, 10_000)}\n\nOutput ONLY the repaired valid JSON object.`;
 
     try {
       const response = await this.client.sendMessage({
@@ -175,6 +224,10 @@ Output ONLY the repaired valid JSON object.`;
         web_search: 'off',
         json_output: true,
       });
+
+      if (aiSpan) {
+        this.extractAndRecordMetadata(response, aiSpan);
+      }
 
       const repairedText = this.extractResponseText(response);
       return parseRawRecommendationResponse(repairedText);

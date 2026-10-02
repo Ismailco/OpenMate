@@ -13,6 +13,7 @@ import {
   ContributionRecommendationService,
   createContributionRecommendationService,
 } from '../contribution-recommendations';
+import { withSpan } from '../observability';
 
 export interface RepositoryGateway {
   ingest(identity: NormalizedRepository): Promise<IngestedRepository>;
@@ -51,14 +52,74 @@ export class RepositoryAnalysisService {
     identity: NormalizedRepository,
     options?: { signal?: AbortSignal }
   ): Promise<RepositoryAnalysisResult> {
-    const ingested = await this.gateway.ingest(identity);
-    const context = buildRepositoryContext(ingested);
-    const analysis = await this.analyzer.analyze(context, options);
+    const repoFullName = `${identity.owner}/${identity.name}`;
 
-    return {
-      repository: ingested.metadata,
-      analysis,
-    };
+    return withSpan(
+      {
+        name: 'OpenMate repository analysis',
+        op: 'openmate.analysis',
+        attributes: {
+          'openmate.repository.full_name': repoFullName,
+        },
+      },
+      async (analysisSpan) => {
+        const ingested = await withSpan(
+          {
+            name: 'GitHub repository ingestion',
+            op: 'github.ingest',
+            attributes: {
+              'openmate.repository.full_name': repoFullName,
+            },
+          },
+          async (ingestSpan) => {
+            const res = await this.gateway.ingest(identity);
+            ingestSpan.setAttributes({
+              'github.tree_entry_count': res.tree?.length ?? 0,
+              'github.issue_count': res.issues?.length ?? 0,
+              'github.source_file_count': res.sourceFiles?.length ?? 0,
+              'github.manifest_count': res.manifests?.length ?? 0,
+              'github.has_readme': Boolean(res.documents?.readme),
+              'github.has_contributing': Boolean(res.documents?.contributing),
+              'github.tree_truncated': Boolean(res.ingestion?.truncatedTree),
+              'github.issues_truncated': Boolean(res.ingestion?.truncatedIssues),
+            });
+            return res;
+          }
+        );
+
+        const context = await withSpan(
+          {
+            name: 'Repository context build',
+            op: 'openmate.context.build',
+          },
+          async (contextSpan) => {
+            const ctx = buildRepositoryContext(ingested);
+            contextSpan.setAttributes({
+              'openmate.context.character_count': ctx.contextMetadata?.approximateCharacters ?? 0,
+              'openmate.context.source_files_included': ctx.contextMetadata?.sourceFilesIncluded ?? 0,
+              'openmate.context.issues_included': ctx.contextMetadata?.issuesIncluded ?? 0,
+              'openmate.context.documents_truncated': (ctx.contextMetadata?.truncatedDocuments ?? 0) > 0,
+              'openmate.context.files_truncated': (ctx.contextMetadata?.truncatedFiles ?? 0) > 0,
+              'openmate.context.issues_truncated': (ctx.contextMetadata?.truncatedIssues ?? 0) > 0,
+            });
+            return ctx;
+          }
+        );
+
+        analysisSpan.setAttribute(
+          'openmate.context.character_count',
+          context.contextMetadata?.approximateCharacters ?? 0
+        );
+        analysisSpan.setAttribute('openmate.repository.issue_count', context.issues?.length ?? 0);
+
+        const analysis = await this.analyzer.analyze(context, options);
+
+        return {
+          repository: ingested.metadata,
+          analysis,
+        };
+      }
+    );
   }
 
   /**
@@ -74,22 +135,98 @@ export class RepositoryAnalysisService {
     profile: DeveloperProfile,
     options?: { signal?: AbortSignal }
   ): Promise<RepositoryAnalysisResult> {
-    const ingested = await this.gateway.ingest(profile.repository);
-    const context = buildRepositoryContext(ingested);
-    const analysis = await this.analyzer.analyze(context, options);
-    const recommendations =
-      await this.recommendationService.generateRecommendations(
-        profile,
-        analysis,
-        context,
-        options
-      );
+    const repoFullName = `${profile.repository.owner}/${profile.repository.name}`;
 
-    return {
-      repository: ingested.metadata,
-      analysis,
-      recommendations,
-    };
+    return withSpan(
+      {
+        name: 'OpenMate repository analysis',
+        op: 'openmate.analysis',
+        attributes: {
+          'openmate.repository.full_name': repoFullName,
+          'openmate.profile.skill_count': profile.skills.length,
+          'openmate.profile.interest_count': profile.interests.length,
+          'openmate.profile.experience': profile.contributionExperience,
+          'openmate.profile.available_hours': profile.availableHours,
+        },
+      },
+      async (analysisSpan) => {
+        const ingested = await withSpan(
+          {
+            name: 'GitHub repository ingestion',
+            op: 'github.ingest',
+            attributes: {
+              'openmate.repository.full_name': repoFullName,
+            },
+          },
+          async (ingestSpan) => {
+            const res = await this.gateway.ingest(profile.repository);
+            ingestSpan.setAttributes({
+              'github.tree_entry_count': res.tree?.length ?? 0,
+              'github.issue_count': res.issues?.length ?? 0,
+              'github.source_file_count': res.sourceFiles?.length ?? 0,
+              'github.manifest_count': res.manifests?.length ?? 0,
+              'github.has_readme': Boolean(res.documents?.readme),
+              'github.has_contributing': Boolean(res.documents?.contributing),
+              'github.tree_truncated': Boolean(res.ingestion?.truncatedTree),
+              'github.issues_truncated': Boolean(res.ingestion?.truncatedIssues),
+            });
+            return res;
+          }
+        );
+
+        const context = await withSpan(
+          {
+            name: 'Repository context build',
+            op: 'openmate.context.build',
+          },
+          async (contextSpan) => {
+            const ctx = buildRepositoryContext(ingested);
+            contextSpan.setAttributes({
+              'openmate.context.character_count': ctx.contextMetadata?.approximateCharacters ?? 0,
+              'openmate.context.source_files_included': ctx.contextMetadata?.sourceFilesIncluded ?? 0,
+              'openmate.context.issues_included': ctx.contextMetadata?.issuesIncluded ?? 0,
+              'openmate.context.documents_truncated': (ctx.contextMetadata?.truncatedDocuments ?? 0) > 0,
+              'openmate.context.files_truncated': (ctx.contextMetadata?.truncatedFiles ?? 0) > 0,
+              'openmate.context.issues_truncated': (ctx.contextMetadata?.truncatedIssues ?? 0) > 0,
+            });
+            return ctx;
+          }
+        );
+
+        analysisSpan.setAttribute(
+          'openmate.context.character_count',
+          context.contextMetadata?.approximateCharacters ?? 0
+        );
+        analysisSpan.setAttribute('openmate.repository.issue_count', context.issues?.length ?? 0);
+
+        const analysis = await this.analyzer.analyze(context, options);
+
+        const recommendations =
+          await this.recommendationService.generateRecommendations(
+            profile,
+            analysis,
+            context,
+            options
+          );
+
+        analysisSpan.setAttribute(
+          'openmate.recommendation.status',
+          recommendations.status
+        );
+        if (recommendations.status === 'recommended') {
+          analysisSpan.setAttribute(
+            'openmate.recommendation.result_count',
+            recommendations.recommendations.length
+          );
+        }
+
+        return {
+          repository: ingested.metadata,
+          analysis,
+          recommendations,
+        };
+      }
+    );
   }
 }
 

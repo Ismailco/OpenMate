@@ -9,6 +9,7 @@ import {
 } from './types';
 import { selectCandidateIssues } from './candidate-selection';
 import { GemmaContributionRecommender } from './providers/gemma-recommender';
+import { withSpan } from '../observability';
 
 export interface RecommendationServiceDependencies {
   recommender?: ContributionRecommender;
@@ -35,7 +36,21 @@ export class ContributionRecommendationService {
     }
 
     // 2. Deterministically shortlist candidate issues (max 8)
-    const candidates = selectCandidateIssues(context.issues, profile, analysis);
+    const candidates = await withSpan(
+      {
+        name: 'Candidate issue selection',
+        op: 'openmate.recommendation.candidates',
+        attributes: {
+          'openmate.candidates.considered_count': context.issues.length,
+        },
+      },
+      async (candidateSpan) => {
+        const selected = selectCandidateIssues(context.issues, profile, analysis);
+        candidateSpan.setAttribute('openmate.candidates.selected_count', selected.length);
+        return selected;
+      }
+    );
+
     if (candidates.length === 0) {
       return {
         status: 'no-suitable-issues',
@@ -76,8 +91,8 @@ export class ContributionRecommendationService {
       metadata: {
         candidateIssuesConsidered: candidates.length,
         generatedAt: new Date().toISOString(),
-        modelProvider: analysis.analysisMetadata.modelProvider,
-        modelName: analysis.analysisMetadata.modelName,
+        modelProvider: 'openrouter',
+        modelName: 'google/gemma-3-27b-it',
       },
     };
   }
