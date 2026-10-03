@@ -12,17 +12,17 @@ tags: devchallenge, weekendchallenge, hf26challenge
 
 Every developer remembers the intimidating barrier of making their first open-source contribution.
 
-A good friend of mine—[FRIEND INPUT REQUIRED: Name or pseudonym, e.g. Alex]—is a capable junior developer with strong [FRIEND INPUT REQUIRED: Primary skills, e.g. TypeScript and React] fundamentals. For months, they wanted to contribute to public open-source projects during Hacktoberfest. But every time they opened a prominent repository like [FRIEND INPUT REQUIRED: Repository name, e.g. a popular UI library or developer tool], they froze:
+A good friend of mine - [FRIEND INPUT REQUIRED: Name or pseudonym, e.g. Alex] - is a capable junior developer with strong [FRIEND INPUT REQUIRED: Primary skills, e.g. TypeScript and React] fundamentals. For months, they wanted to contribute to public open-source projects during Hacktoberfest. But every time they opened a prominent repository like [FRIEND INPUT REQUIRED: Repository name, e.g. a popular UI library or developer tool], they froze:
 
 - The repository had hundreds of open issues, and even those labeled `good first issue` assumed intimate familiarity with monorepos or complex build tooling.
 - The directory tree contained thousands of files across dozens of packages, with no clear indication of where a newcomer could safely make edits.
 - Contribution guidelines were dense, and estimating whether a task would take two hours or two weeks felt impossible.
 
-The barrier was not writing code—it was **navigating repository scale and finding a grounded starting point**.
+The barrier was not writing code - it was **navigating repository scale and finding a grounded starting point**.
 
 I built **OpenMate** ([https://openmate-zq7d.onrender.com](https://openmate-zq7d.onrender.com)) specifically to solve this problem for my friend.
 
-OpenMate takes any public GitHub repository and your personal developer profile (skills, skill levels, contribution interests, and weekly available time). In a single, bounded pass, it ingests the repository, extracts its architectural context, analyzes it using **Google Gemma 3 27B**, deterministically shortlists real open GitHub issues, and delivers **"Your First Contribution"**—a personalized, actionable dashboard showing:
+OpenMate takes any public GitHub repository and your personal developer profile (skills, skill levels, contribution interests, and weekly available time). In a single, bounded pass, it ingests the repository, extracts its architectural context, analyzes it using **Google Gemma 3 27B**, deterministically shortlists real open GitHub issues, and delivers **"Your First Contribution"** - a personalized, actionable dashboard showing:
 
 1. **A Primary Recommended Issue**: The single highest-fit real issue on GitHub, explaining why your skills match, estimating scope (`small`, `medium`, `large`), and providing a concrete starting plan.
 2. **First Files to Read**: The exact 2–3 entrypoint source files to inspect first, deterministically verified against the real repository tree.
@@ -181,7 +181,7 @@ Measuring our live pipeline on Render yielded a critical performance insight:
 - Deterministic ingestion, context construction, and candidate filtering account for **under 4% of total pipeline latency** (~1.92s total).
 - The two sequential Gemma 27B reasoning calls account for **roughly 96% of total latency** (~46.25s).
 - RAG document upload and indexing during chat initialization requires **8.35s** (~7.1s in indexing status polling).
-- Once indexed, follow-up conversational turns return in **3.30s to 5.86s**—an **8x–14x speedup** over re-analyzing the repository.
+- Once indexed, follow-up conversational turns return in **3.30s to 5.86s** - an **8x–14x speedup** over re-analyzing the repository.
 
 **Privacy-First Observability**:
 Span attributes record counts and status codes only (`openmate.context.character_count`, `github.issue_count`, `openmate.recommendation.candidate_count`). Sentry `beforeSend` and `beforeSendSpan` scrub all authorization headers, cookies, repository source blobs, issue bodies, prompts, model completions, and raw Backboard thread IDs. Conversation turns are safely grouped using a one-way hash (`conv_<sha256(threadId)>`).
@@ -205,7 +205,7 @@ By building on **Google Gemma 3 27B open weights**, OpenMate demonstrates why op
 
 ## My Agent Session
 
-<!-- [DEVRELAY SESSION OPTIONAL — ADD IF AVAILABLE] -->
+<!-- [DEVRELAY SESSION OPTIONAL - ADD IF AVAILABLE] -->
 *Note: OpenMate's implementation was orchestrated following a structured multi-phase agent workflow. Contributor documentation and full git trajectory are preserved in the repository history.*
 
 ---

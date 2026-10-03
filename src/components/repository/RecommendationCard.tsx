@@ -134,7 +134,7 @@ export function RecommendationCard({ recommendation }: RecommendationCardProps) 
                   <ul className="space-y-1">
                     {likelyFiles.map((file) => (
                       <li key={file.path} className="font-mono text-[var(--foreground)]">
-                        <code className="text-[var(--accent)]">{file.path}</code> &mdash;{' '}
+                        <code className="text-[var(--accent)]">{file.path}</code> -{' '}
                         <span className="text-[var(--muted)] font-sans">{file.reason}</span>
                       </li>
                     ))}

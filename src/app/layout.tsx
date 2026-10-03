@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://openmate-zq7d.onrender.com'),
   title: {
     template: '%s | OpenMate',
-    default: 'OpenMate — Find Your First Open-Source Contribution',
+    default: 'OpenMate - Find Your First Open-Source Contribution',
   },
   description:
     'OpenMate helps developers understand unfamiliar open-source repositories and find an actionable, personalized path toward their first contribution.',
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     'hacktoberfest',
   ],
   openGraph: {
-    title: 'OpenMate — Find Your First Open-Source Contribution',
+    title: 'OpenMate - Find Your First Open-Source Contribution',
     description:
       'Personalized repository onboarding for developers making their first open-source contribution.',
     url: 'https://openmate-zq7d.onrender.com',

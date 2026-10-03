@@ -16,7 +16,7 @@ OpenMate helps developers find and make their first meaningful open-source contr
 
 ## The Problem
 
-Every developer remembers trying to make their first open-source contribution. The barrier is almost never the code itself—it is **repository scale and architectural friction**:
+Every developer remembers trying to make their first open-source contribution. The barrier is almost never the code itself - it is **repository scale and architectural friction**:
 
 * **Massive Codebases**: Navigating hundreds of source files and complex directory structures without knowing which files actually matter.
 * **Issue Overload**: Sorting through hundreds of open issues where even those labeled `good first issue` often assume intimate monorepo familiarity.
@@ -34,7 +34,7 @@ OpenMate eliminates this friction by matching a contributor's declared skills an
 3. **Bounded Context Engine**: Assembles a deterministic 60,000-character context snapshot prioritizing documentation, dependency manifests, entrypoints, and open issues.
 4. **Google Gemma 3 27B Architecture Analysis**: Extracts architectural subsystems, core technologies, and recommended files to understand.
 5. **Deterministic Issue Candidate Selection**: Pre-filters and scores all open issues before any AI call, producing a focused shortlist of at most 8 real GitHub issues.
-6. **Personalized Contribution Recommendations**: Gemma evaluates the candidate issues against the developer profile, producing "Your First Contribution"—a primary recommendation with fit reasoning, scope estimation, entrypoint files, and investigation steps.
+6. **Personalized Contribution Recommendations**: Gemma evaluates the candidate issues against the developer profile, producing "Your First Contribution" - a primary recommendation with fit reasoning, scope estimation, entrypoint files, and investigation steps.
 7. **Ask OpenMate (Thread-Scoped RAG)**: Provides an interactive follow-up chat powered by Backboard vector RAG and Gemma 3 27B, allowing contributors to ask questions grounded strictly in the repository context.
 
 ---

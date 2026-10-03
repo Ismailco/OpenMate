@@ -158,7 +158,7 @@ export default function HomePage() {
               <div>
                 <span className="text-xs font-mono text-[var(--muted)]">Previewing: colinhacks/zod</span>
                 <h3 className="text-xl font-bold font-mono text-[var(--foreground)]">
-                  Zod — TypeScript-first schema validation
+                  Zod - TypeScript-first schema validation
                 </h3>
               </div>
               <Badge variant="accent" size="sm">TypeScript</Badge>
