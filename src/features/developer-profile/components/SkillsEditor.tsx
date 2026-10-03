@@ -84,8 +84,8 @@ export function SkillsEditor({ skills, error, onChange }: SkillsEditorProps) {
       </div>
 
       {/* Input row */}
-      <div className="flex flex-col sm:flex-row gap-2">
-        <div className="flex-1">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+        <div className="flex-1 min-w-0">
           <Input
             id="new-skill-input"
             placeholder="e.g. TypeScript, React, Go, Rust, PostgreSQL"
@@ -102,10 +102,11 @@ export function SkillsEditor({ skills, error, onChange }: SkillsEditorProps) {
             }}
             aria-describedby={displayedError ? 'skills-error' : 'skills-description'}
             hasError={Boolean(displayedError)}
+            className="h-10"
           />
         </div>
 
-        <div className="sm:w-44">
+        <div className="sm:w-44 shrink-0">
           <label htmlFor="skill-level-select" className="sr-only">
             Skill proficiency level
           </label>
@@ -113,7 +114,7 @@ export function SkillsEditor({ skills, error, onChange }: SkillsEditorProps) {
             id="skill-level-select"
             value={newSkillLevel}
             onChange={(e) => setNewSkillLevel(e.target.value as SkillLevel)}
-            className="w-full px-3 py-2 text-sm rounded-md bg-[var(--surface)] text-[var(--foreground)] border border-[var(--border)] focus:border-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]"
+            className="w-full h-10 px-3 py-2 text-sm rounded-md bg-[var(--surface)] text-[var(--foreground)] border border-[var(--border)] focus:border-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] cursor-pointer"
           >
             {SKILL_LEVELS.map((lvl) => (
               <option key={lvl.value} value={lvl.value}>
@@ -128,7 +129,7 @@ export function SkillsEditor({ skills, error, onChange }: SkillsEditorProps) {
           onClick={handleAddSkill}
           variant="secondary"
           size="md"
-          className="shrink-0"
+          className="h-10 shrink-0"
         >
           Add skill
         </Button>
