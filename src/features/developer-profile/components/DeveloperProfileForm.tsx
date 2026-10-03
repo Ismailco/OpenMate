@@ -216,7 +216,7 @@ export function DeveloperProfileForm() {
           <CardHeader>
             <CardTitle>Developer Contribution Profile</CardTitle>
             <CardDescription>
-              OpenMate matches open issues to your exact capabilities and time constraints.
+              OpenMate matches open issues to your skills and available time.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -5,7 +5,7 @@ import { RepositoryResultsClient } from '@/components/repository';
 export const metadata: Metadata = {
   title: 'Repository Contribution Analysis - OpenMate',
   description:
-    'Grounded open-source contribution recommendations and architectural onboarding guide powered by Google Gemma.',
+    'Find a real open-source issue that fits your skills and learn exactly where to start.',
 };
 
 export default function RepoResultsPage() {

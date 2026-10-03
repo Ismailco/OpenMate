@@ -29,8 +29,7 @@ export default function HomePage() {
           </h1>
 
           <p className="text-base sm:text-lg text-[var(--muted)] max-w-2xl mx-auto leading-relaxed text-balance">
-            OpenMate analyzes unfamiliar open-source repositories and matches your skills,
-            experience, and available time with an actionable, personalized path to your first merged PR.
+            Paste a public GitHub repo, tell OpenMate your skills, and get a real issue that fits you, with a clear path to start contributing.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
@@ -100,7 +99,7 @@ export default function HomePage() {
         {/* How It Works Section */}
         <Section
           title="How OpenMate Works"
-          description="Three focused steps from repository URL to concrete pull request roadmap."
+          description="Three simple steps from a repository URL to your first contribution."
           badge={<Badge variant="accent" size="sm">Workflow</Badge>}
         >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -140,7 +139,7 @@ export default function HomePage() {
         <Section
           id="preview"
           title="Product Preview"
-          description="Explore what your personalized repository analysis looks like before running your own."
+          description="Explore what a repository analysis and issue recommendation look like before analyzing your own."
           badge={<Badge variant="outline" size="sm">Static Demonstration</Badge>}
           headerAction={
             <Button href="/repo" variant="outline" size="sm">

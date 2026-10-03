@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     default: 'OpenMate - Find Your First Open-Source Contribution',
   },
   description:
-    'OpenMate helps developers understand unfamiliar open-source repositories and find an actionable, personalized path toward their first contribution.',
+    'Find a real open-source issue that fits your skills and learn exactly where to start.',
   applicationName: 'OpenMate',
   authors: [{ name: 'OpenMate Team' }],
   keywords: [
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'OpenMate - Find Your First Open-Source Contribution',
     description:
-      'Personalized repository onboarding for developers making their first open-source contribution.',
+      'Find a real open-source issue that fits your skills and learn exactly where to start.',
     url: 'https://openmate-zq7d.onrender.com',
     siteName: 'OpenMate',
     type: 'website',

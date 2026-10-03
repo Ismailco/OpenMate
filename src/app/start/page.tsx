@@ -8,7 +8,7 @@ import { DeveloperProfileForm } from '@/features/developer-profile';
 export const metadata: Metadata = {
   title: 'Start Contribution Onboarding',
   description:
-    'Provide your familiar technologies, open-source experience, and target GitHub repository to build your personalized contribution profile.',
+    'Find a real open-source issue that fits your skills and learn exactly where to start.',
 };
 
 export default function StartPage() {
@@ -17,7 +17,7 @@ export default function StartPage() {
       <Container size="sm">
         <PageHeader
           title="Find your first contribution"
-          description="Tell OpenMate which repository you want to explore and configure your skills to receive matched issues."
+          description="Paste a public GitHub repo, tell OpenMate what you know, and get matched issues with a clear path to start."
           badge={<Badge variant="accent" size="sm">Contribution Onboarding</Badge>}
         />
 
