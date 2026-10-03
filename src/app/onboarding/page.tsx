@@ -38,12 +38,9 @@ export default function OnboardingPage() {
             interests, experience, and available time, and recommends a real issue with a practical starting point.
           </p>
 
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+          <div className="pt-2">
             <Button href="/start" variant="primary" size="md">
               Start analyzing a repository &rarr;
-            </Button>
-            <Button href="/#preview" variant="outline" size="md">
-              View an example
             </Button>
           </div>
         </header>

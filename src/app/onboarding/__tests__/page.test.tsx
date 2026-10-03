@@ -17,10 +17,6 @@ describe('Onboarding Page', () => {
     const startCta = screen.getByRole('link', { name: /start analyzing a repository/i });
     expect(startCta).toBeInTheDocument();
     expect(startCta).toHaveAttribute('href', '/start');
-
-    const previewCta = screen.getByRole('link', { name: /view an example/i });
-    expect(previewCta).toBeInTheDocument();
-    expect(previewCta).toHaveAttribute('href', '/#preview');
   });
 
   it('renders key section headings and boundaries', () => {
