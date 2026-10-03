@@ -21,4 +21,11 @@ describe('Navbar component', () => {
     const nav = screen.getByRole('navigation', { name: /main navigation/i });
     expect(nav).toBeInTheDocument();
   });
+
+  it('renders navigation link to onboarding guide', () => {
+    render(<Navbar />);
+    const link = screen.getByRole('link', { name: /^onboarding$/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', '/onboarding');
+  });
 });

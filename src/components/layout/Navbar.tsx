@@ -19,10 +19,10 @@ export function Navbar() {
 
             <nav className="hidden sm:flex items-center gap-4 text-xs font-medium text-[var(--muted)]" aria-label="Main navigation">
               <Link
-                href="/#how-it-works"
+                href="/onboarding"
                 className="hover:text-[var(--foreground)] transition-colors py-1"
               >
-                How it works
+                Onboarding
               </Link>
               <Link
                 href="/#preview"
