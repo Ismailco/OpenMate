@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default function StartPage() {
   return (
     <main className="flex-1 py-8 sm:py-12">
-      <Container size="sm">
+      <Container size="form">
         <PageHeader
           title="Find your first contribution"
           description="Paste a public GitHub repo, tell OpenMate what you know, and get matched issues with a clear path to start."

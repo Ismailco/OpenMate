@@ -3,12 +3,13 @@ import { cn } from '@/lib/cn';
 
 export interface ContainerProps extends React.HTMLAttributes<HTMLDivElement> {
   as?: 'div' | 'section' | 'main' | 'header' | 'footer';
-  size?: 'sm' | 'md' | 'lg' | 'full';
+  size?: 'sm' | 'form' | 'md' | 'lg' | 'full';
   children: React.ReactNode;
 }
 
 const sizeClasses = {
   sm: 'max-w-3xl',
+  form: 'max-w-4xl',
   md: 'max-w-5xl',
   lg: 'max-w-7xl',
   full: 'max-w-full',

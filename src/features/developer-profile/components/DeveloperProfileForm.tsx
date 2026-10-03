@@ -260,19 +260,19 @@ export function DeveloperProfileForm() {
                 error={formErrors.interests}
               />
 
-              {/* Experience and Availability Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                <ExperienceField
-                  value={experience}
-                  onChange={setExperience}
-                  error={formErrors.contributionExperience}
-                />
-                <AvailabilityField
-                  value={availableHours}
-                  onChange={setAvailableHours}
-                  error={formErrors.availableHours}
-                />
-              </div>
+              {/* Experience Field */}
+              <ExperienceField
+                value={experience}
+                onChange={setExperience}
+                error={formErrors.contributionExperience}
+              />
+
+              {/* Availability Field */}
+              <AvailabilityField
+                value={availableHours}
+                onChange={setAvailableHours}
+                error={formErrors.availableHours}
+              />
 
               {/* Form Action */}
               <div className="pt-6 border-t border-[var(--border-muted)] flex flex-col sm:flex-row items-center justify-between gap-4">

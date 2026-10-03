@@ -15,6 +15,11 @@ test.describe('Critical Contribution Path', () => {
     await page.goto('/');
     await expect(page).toHaveTitle(/OpenMate/i);
 
+    // Verify navbar "How it works" anchor
+    const howItWorksLink = page.getByRole('navigation', { name: /main navigation/i }).getByRole('link', { name: /how it works/i });
+    await expect(howItWorksLink).toBeVisible();
+    await expect(howItWorksLink).toHaveAttribute('href', '/#how-it-works');
+
     // 2. Click primary CTA in main hero section to begin onboarding
     const startCta = page.getByRole('main').getByRole('link', { name: /find my first contribution/i }).first();
     await expect(startCta).toBeVisible();

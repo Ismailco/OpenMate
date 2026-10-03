@@ -98,6 +98,7 @@ export default function HomePage() {
 
         {/* How It Works Section */}
         <Section
+          id="how-it-works"
           title="How OpenMate Works"
           description="Three simple steps from a repository URL to your first contribution."
           badge={<Badge variant="accent" size="sm">Workflow</Badge>}

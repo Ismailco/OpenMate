@@ -21,7 +21,7 @@ export function Section({
   ...props
 }: SectionProps) {
   return (
-    <section id={id} className={cn('py-8 sm:py-12', className)} {...props}>
+    <section id={id} className={cn('py-8 sm:py-12 scroll-mt-16', className)} {...props}>
       {(title || description || badge || headerAction) && (
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-6 pb-3 border-b border-[var(--border-muted)]">
           <div>
